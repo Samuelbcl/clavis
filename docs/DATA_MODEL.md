@@ -41,7 +41,7 @@ Chaque clé physique, attachée à un bien. Un bien peut avoir N clés (porte d'
 | `id`                   | uuid (PK)   |                                                                |
 | `bien_id`              | uuid (FK)   | → biens.id, ON DELETE CASCADE                                  |
 | `code`                 | text UNIQUE | Ex: "CLV-0042", imprimé sur le QR code                         |
-| `type`                 | enum        | porte_entree, garage, cave, boite_aux_lettres, badge, autre    |
+| `type`                 | enum        | porte_entree, garage, cave, boite_aux_lettres, badge_immeuble, autre |
 | `description`          | text        | Nullable. Ex: "Clé Vachette dorée"                             |
 | `statut`               | enum        | disponible, remise, perdue, refaite, archivee                  |
 | `personne_actuelle_id` | uuid (FK)   | Nullable → personnes.id (dénormalisé pour perf)                |
