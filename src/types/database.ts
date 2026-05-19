@@ -153,6 +153,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "mouvements_cle_id_fkey"
+            columns: ["cle_id"]
+            isOneToOne: false
+            referencedRelation: "cles_view"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "mouvements_operateur_id_fkey"
             columns: ["operateur_id"]
             isOneToOne: false
@@ -233,7 +240,50 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      cles_view: {
+        Row: {
+          bien_adresse_complete: string | null
+          bien_code_postal: string | null
+          bien_id: string | null
+          bien_nom: string | null
+          bien_type: Database["public"]["Enums"]["bien_type"] | null
+          bien_ville: string | null
+          code: string | null
+          created_at: string | null
+          dernier_mouvement_date: string | null
+          dernier_mouvement_type:
+            | Database["public"]["Enums"]["mouvement_type"]
+            | null
+          description: string | null
+          id: string | null
+          personne_actuelle_id: string | null
+          personne_email: string | null
+          personne_nom: string | null
+          personne_prenom: string | null
+          personne_telephone: string | null
+          personne_type: Database["public"]["Enums"]["personne_type"] | null
+          search_vector: unknown
+          statut: Database["public"]["Enums"]["cle_statut"] | null
+          type: Database["public"]["Enums"]["cle_type"] | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cles_bien_id_fkey"
+            columns: ["bien_id"]
+            isOneToOne: false
+            referencedRelation: "biens"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cles_personne_actuelle_id_fkey"
+            columns: ["personne_actuelle_id"]
+            isOneToOne: false
+            referencedRelation: "personnes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       is_admin: { Args: never; Returns: boolean }

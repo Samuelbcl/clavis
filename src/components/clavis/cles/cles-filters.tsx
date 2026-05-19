@@ -17,6 +17,7 @@ import type { Database } from "@/types/database";
 
 type CleType = Database["public"]["Enums"]["cle_type"];
 type CleStatut = Database["public"]["Enums"]["cle_statut"];
+type PersonneType = Database["public"]["Enums"]["personne_type"];
 
 const STATUT_OPTIONS: { value: CleStatut | "all" | "actives"; label: string }[] = [
   { value: "actives", label: "Actives (hors archivées)" },
@@ -38,6 +39,17 @@ const TYPE_OPTIONS: { value: CleType | "all"; label: string }[] = [
   { value: "autre", label: "Autre" },
 ];
 
+const PERSONNE_TYPE_OPTIONS: { value: PersonneType | "all"; label: string }[] = [
+  { value: "all", label: "Tous détenteurs" },
+  { value: "locataire", label: "Locataire" },
+  { value: "ouvrier", label: "Ouvrier" },
+  { value: "artisan", label: "Artisan" },
+  { value: "agent", label: "Agent immo" },
+  { value: "notaire", label: "Notaire" },
+  { value: "proprietaire", label: "Propriétaire" },
+  { value: "autre", label: "Autre" },
+];
+
 export function ClesFilters({
   biens,
 }: {
@@ -52,6 +64,7 @@ export function ClesFilters({
   const statut = params.get("statut") ?? "actives";
   const type = params.get("type") ?? "all";
   const bien = params.get("bien") ?? "all";
+  const personneType = params.get("personne_type") ?? "all";
 
   useEffect(() => {
     const current = params.get("q") ?? "";
@@ -79,7 +92,8 @@ export function ClesFilters({
     (params.get("q") ?? "") !== "" ||
     statut !== "actives" ||
     type !== "all" ||
-    bien !== "all";
+    bien !== "all" ||
+    personneType !== "all";
 
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -146,6 +160,24 @@ export function ClesFilters({
           </SelectContent>
         </Select>
       )}
+
+      <Select
+        value={personneType}
+        onValueChange={(v) =>
+          pushParams({ personne_type: v === "all" ? null : v })
+        }
+      >
+        <SelectTrigger className="w-full sm:w-44">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {PERSONNE_TYPE_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {hasFilters && (
         <Button

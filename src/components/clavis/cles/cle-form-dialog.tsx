@@ -26,8 +26,17 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { Database } from "@/types/database";
 
-type CleRow = Database["public"]["Tables"]["cles"]["Row"];
 type CleType = Database["public"]["Enums"]["cle_type"];
+
+// Shape minimal accepté en mode edit : id + champs éditables.
+// Permet de recevoir aussi bien une Row de cles que de cles_view sans cast.
+export type CleEditable = {
+  id: string;
+  bien_id: string;
+  code: string;
+  type: CleType;
+  description: string | null;
+};
 
 export type BienOption = {
   id: string;
@@ -53,7 +62,7 @@ function emptyState(firstBienId: string | undefined): CleInput {
   };
 }
 
-function fromCle(c: CleRow): CleInput {
+function fromCle(c: CleEditable): CleInput {
   return {
     bien_id: c.bien_id,
     code: c.code,
@@ -69,7 +78,7 @@ export function CleFormDialog({
   trigger,
 }: {
   mode: "create" | "edit";
-  cle?: CleRow;
+  cle?: CleEditable;
   biens: BienOption[];
   trigger: React.ReactElement;
 }) {

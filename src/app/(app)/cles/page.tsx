@@ -2,6 +2,7 @@ import {
   Archive,
   ArchiveRestore,
   HandCoins,
+  Mail,
   MoreHorizontal,
   Phone,
   Plus,
@@ -13,6 +14,7 @@ import { CleFormDialog } from "@/components/clavis/cles/cle-form-dialog";
 import { ClesFilters } from "@/components/clavis/cles/cles-filters";
 import { RecupererCleDialog } from "@/components/clavis/cles/recuperer-cle-dialog";
 import { RemettreCleDialog } from "@/components/clavis/cles/remettre-cle-dialog";
+import { SortableHeader } from "@/components/clavis/cles/sortable-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,6 +44,8 @@ import type { Database } from "@/types/database";
 
 type CleType = Database["public"]["Enums"]["cle_type"];
 type CleStatut = Database["public"]["Enums"]["cle_statut"];
+type PersonneType = Database["public"]["Enums"]["personne_type"];
+type MouvementType = Database["public"]["Enums"]["mouvement_type"];
 
 const TYPE_LABELS: Record<CleType, string> = {
   porte_entree: "Porte d'entrée",
@@ -71,6 +75,13 @@ const STATUT_VARIANT: Record<
   archivee: "outline",
 };
 
+const MOUVEMENT_LABELS: Record<MouvementType, string> = {
+  remise: "Remise",
+  retour: "Retour",
+  perte: "Perte",
+  refaite: "Refaite",
+};
+
 const VALID_STATUTS = new Set<CleStatut>([
   "disponible",
   "remise",
@@ -79,7 +90,7 @@ const VALID_STATUTS = new Set<CleStatut>([
   "archivee",
 ]);
 
-const VALID_TYPES = new Set<CleType>([
+const VALID_CLE_TYPES = new Set<CleType>([
   "porte_entree",
   "garage",
   "cave",
@@ -88,8 +99,37 @@ const VALID_TYPES = new Set<CleType>([
   "autre",
 ]);
 
+const VALID_PERSONNE_TYPES = new Set<PersonneType>([
+  "locataire",
+  "ouvrier",
+  "artisan",
+  "agent",
+  "notaire",
+  "proprietaire",
+  "autre",
+]);
+
+// Tri : col URL → colonne DB cles_view.
+const SORT_COLUMNS: Record<string, string> = {
+  code: "code",
+  bien: "bien_nom",
+  statut: "statut",
+  personne: "personne_nom",
+  dernier: "dernier_mouvement_date",
+};
+
 function sanitizeForIlike(input: string): string {
   return input.replace(/[%_,()]/g, " ").trim();
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("fr-BE", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export default async function ClesPage({
@@ -100,24 +140,35 @@ export default async function ClesPage({
     statut?: string;
     type?: string;
     bien?: string;
+    personne_type?: string;
+    sort?: string;
+    dir?: string;
   }>;
 }) {
   const params = await searchParams;
   const q = params.q?.trim() ?? "";
-  const statutParam = params.statut;
-  const typeParam = params.type;
-  const bienFilter = params.bien;
 
   const statutFilter =
-    statutParam === "all"
+    params.statut === "all"
       ? "all"
-      : statutParam && VALID_STATUTS.has(statutParam as CleStatut)
-        ? (statutParam as CleStatut)
+      : params.statut && VALID_STATUTS.has(params.statut as CleStatut)
+        ? (params.statut as CleStatut)
         : "actives";
   const typeFilter =
-    typeParam && VALID_TYPES.has(typeParam as CleType)
-      ? (typeParam as CleType)
+    params.type && VALID_CLE_TYPES.has(params.type as CleType)
+      ? (params.type as CleType)
       : null;
+  const personneTypeFilter =
+    params.personne_type &&
+    VALID_PERSONNE_TYPES.has(params.personne_type as PersonneType)
+      ? (params.personne_type as PersonneType)
+      : null;
+  const bienFilter =
+    params.bien && params.bien !== "all" ? params.bien : null;
+
+  const sortKey = params.sort && SORT_COLUMNS[params.sort] ? params.sort : "code";
+  const sortColumn = SORT_COLUMNS[sortKey];
+  const sortDir: "asc" | "desc" = params.dir === "desc" ? "desc" : "asc";
 
   const user = await getCurrentUser();
   const supabase = await createClient();
@@ -136,13 +187,19 @@ export default async function ClesPage({
   const personnes = personnesRaw ?? [];
 
   let query = supabase
-    .from("cles")
+    .from("cles_view")
     .select(
       `id, code, type, statut, description, bien_id, personne_actuelle_id, created_at, updated_at,
-       bien:biens!cles_bien_id_fkey (id, nom, ville),
-       personne_actuelle:personnes!cles_personne_actuelle_id_fkey (id, nom, prenom, telephone)`,
+       bien_nom, bien_adresse_complete, bien_code_postal, bien_ville, bien_type,
+       personne_nom, personne_prenom, personne_telephone, personne_email, personne_type,
+       dernier_mouvement_type, dernier_mouvement_date`,
     )
-    .order("code", { ascending: true });
+    .order(sortColumn, { ascending: sortDir === "asc", nullsFirst: false });
+
+  // Tri secondaire stable : par code asc (sauf si on trie déjà par code).
+  if (sortColumn !== "code") {
+    query = query.order("code", { ascending: true });
+  }
 
   if (statutFilter === "actives") {
     query = query.neq("statut", "archivee");
@@ -151,13 +208,28 @@ export default async function ClesPage({
   }
 
   if (typeFilter) query = query.eq("type", typeFilter);
-  if (bienFilter && bienFilter !== "all") query = query.eq("bien_id", bienFilter);
+  if (bienFilter) query = query.eq("bien_id", bienFilter);
+  if (personneTypeFilter) query = query.eq("personne_type", personneTypeFilter);
 
   if (q) {
     const safe = sanitizeForIlike(q);
     if (safe.length > 0) {
       const pattern = `%${safe}%`;
-      query = query.or(`code.ilike.${pattern},description.ilike.${pattern}`);
+      // Recherche fulltext cross-table : on tape sur les colonnes plates de la vue.
+      query = query.or(
+        [
+          `code.ilike.${pattern}`,
+          `description.ilike.${pattern}`,
+          `bien_nom.ilike.${pattern}`,
+          `bien_adresse_complete.ilike.${pattern}`,
+          `bien_ville.ilike.${pattern}`,
+          `bien_code_postal.ilike.${pattern}`,
+          `personne_nom.ilike.${pattern}`,
+          `personne_prenom.ilike.${pattern}`,
+          `personne_telephone.ilike.${pattern}`,
+          `personne_email.ilike.${pattern}`,
+        ].join(","),
+      );
     }
   }
 
@@ -186,7 +258,8 @@ export default async function ClesPage({
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Clés</h1>
           <p className="text-muted-foreground text-sm">
-            Inventaire de toutes les clés physiques rattachées à un bien.
+            Tableau central : toutes les clés du parc, leur statut et leur
+            détenteur actuel.
           </p>
         </div>
         {isAdmin && (
@@ -220,7 +293,11 @@ export default async function ClesPage({
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-muted-foreground text-sm">
-              {q || typeFilter || bienFilter || statutFilter !== "actives"
+              {q ||
+              typeFilter ||
+              bienFilter ||
+              personneTypeFilter ||
+              statutFilter !== "actives"
                 ? "Aucune clé ne correspond aux filtres."
                 : isAdmin
                   ? "Aucune clé encore. Ajoute-en une avec « Nouvelle clé »."
@@ -235,79 +312,113 @@ export default async function ClesPage({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Bien</TableHead>
+                <TableHead>
+                  <SortableHeader column="code" label="Code" />
+                </TableHead>
+                <TableHead>
+                  <SortableHeader column="bien" label="Bien" />
+                </TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead>Détenteur actuel</TableHead>
+                <TableHead>
+                  <SortableHeader column="statut" label="Statut" />
+                </TableHead>
+                <TableHead>
+                  <SortableHeader column="personne" label="Détenteur" />
+                </TableHead>
+                <TableHead>
+                  <SortableHeader column="dernier" label="Dernier mouvement" />
+                </TableHead>
                 <TableHead className="w-12 text-right" aria-label="Actions" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {cles.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-mono font-medium">
-                    {c.code}
-                  </TableCell>
-                  <TableCell>
-                    {c.bien ? (
-                      <div className="flex flex-col">
-                        <span className="text-sm">{c.bien.nom}</span>
-                        <span className="text-muted-foreground text-xs">
-                          {c.bien.ville}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {TYPE_LABELS[c.type]}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={STATUT_VARIANT[c.statut]}>
-                      {STATUT_LABELS[c.statut]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {c.personne_actuelle ? (
-                      <div className="flex flex-col">
-                        <span className="text-sm">
-                          {c.personne_actuelle.prenom}{" "}
-                          {c.personne_actuelle.nom}
-                        </span>
-                        <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-                          <Phone aria-hidden className="size-3" />
-                          {c.personne_actuelle.telephone}
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {(() => {
-                      const canRemettre = c.statut === "disponible";
-                      const canRecuperer = c.statut === "remise";
-                      const hasMouvementAction = canRemettre || canRecuperer;
-                      const showMenu = isAdmin || hasMouvementAction;
-                      const bienLabel = c.bien
-                        ? `${c.bien.nom} — ${c.bien.ville}`
-                        : "—";
-                      const detenteurLabel = c.personne_actuelle
-                        ? `${c.personne_actuelle.prenom} ${c.personne_actuelle.nom}`
-                        : null;
+              {cles.map((c) => {
+                // L'id et les champs cles non-nullable sont en pratique toujours
+                // remplis (la vue lit la table cles qui les a NOT NULL).
+                const cleId = c.id!;
+                const cleCode = c.code!;
+                const cleType = c.type!;
+                const cleStatut = c.statut!;
+                const cleBienId = c.bien_id!;
+                const canRemettre = cleStatut === "disponible";
+                const canRecuperer = cleStatut === "remise";
+                const hasMouvementAction = canRemettre || canRecuperer;
+                const showMenu = isAdmin || hasMouvementAction;
+                const bienLabel = c.bien_nom
+                  ? `${c.bien_nom} — ${c.bien_ville ?? ""}`
+                  : "—";
+                const detenteurLabel =
+                  c.personne_nom && c.personne_prenom
+                    ? `${c.personne_prenom} ${c.personne_nom}`
+                    : null;
 
-                      if (!showMenu) return null;
-
-                      return (
+                return (
+                  <TableRow key={cleId}>
+                    <TableCell className="font-mono font-medium">
+                      {cleCode}
+                    </TableCell>
+                    <TableCell>
+                      {c.bien_nom ? (
+                        <div className="flex flex-col">
+                          <span className="text-sm">{c.bien_nom}</span>
+                          <span className="text-muted-foreground text-xs">
+                            {c.bien_ville}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {TYPE_LABELS[cleType]}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={STATUT_VARIANT[cleStatut]}>
+                        {STATUT_LABELS[cleStatut]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {detenteurLabel ? (
+                        <div className="flex flex-col">
+                          <span className="text-sm">{detenteurLabel}</span>
+                          <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+                            <Phone aria-hidden className="size-3" />
+                            {c.personne_telephone}
+                          </span>
+                          {c.personne_email && (
+                            <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+                              <Mail aria-hidden className="size-3" />
+                              {c.personne_email}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {c.dernier_mouvement_type ? (
+                        <div className="flex flex-col">
+                          <span>
+                            {MOUVEMENT_LABELS[c.dernier_mouvement_type]}
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            {formatDate(c.dernier_mouvement_date)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">Jamais</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {showMenu && (
                         <DropdownMenu>
                           <DropdownMenuTrigger
                             render={
                               <Button
                                 variant="ghost"
                                 size="icon-sm"
-                                aria-label={`Actions pour ${c.code}`}
+                                aria-label={`Actions pour ${cleCode}`}
                               />
                             }
                           >
@@ -316,8 +427,8 @@ export default async function ClesPage({
                           <DropdownMenuContent align="end">
                             {canRemettre && (
                               <RemettreCleDialog
-                                cleId={c.id}
-                                cleCode={c.code}
+                                cleId={cleId}
+                                cleCode={cleCode}
                                 bienLabel={bienLabel}
                                 personnes={personnes}
                                 trigger={
@@ -330,8 +441,8 @@ export default async function ClesPage({
                             )}
                             {canRecuperer && (
                               <RecupererCleDialog
-                                cleId={c.id}
-                                cleCode={c.code}
+                                cleId={cleId}
+                                cleCode={cleCode}
                                 detenteurLabel={detenteurLabel}
                                 trigger={
                                   <DropdownMenuItem closeOnClick={false}>
@@ -347,7 +458,13 @@ export default async function ClesPage({
                             {isAdmin && (
                               <CleFormDialog
                                 mode="edit"
-                                cle={c}
+                                cle={{
+                                  id: cleId,
+                                  bien_id: cleBienId,
+                                  code: cleCode,
+                                  type: cleType,
+                                  description: c.description,
+                                }}
                                 biens={biens}
                                 trigger={
                                   <DropdownMenuItem closeOnClick={false}>
@@ -357,10 +474,10 @@ export default async function ClesPage({
                               />
                             )}
                             {isAdmin && <DropdownMenuSeparator />}
-                            {isAdmin && c.statut === "archivee" && (
+                            {isAdmin && cleStatut === "archivee" && (
                               <ArchiveCleDialog
-                                cleId={c.id}
-                                cleCode={c.code}
+                                cleId={cleId}
+                                cleCode={cleCode}
                                 archive={false}
                                 trigger={
                                   <DropdownMenuItem closeOnClick={false}>
@@ -370,10 +487,10 @@ export default async function ClesPage({
                                 }
                               />
                             )}
-                            {isAdmin && c.statut !== "archivee" && (
+                            {isAdmin && cleStatut !== "archivee" && (
                               <ArchiveCleDialog
-                                cleId={c.id}
-                                cleCode={c.code}
+                                cleId={cleId}
+                                cleCode={cleCode}
                                 archive={true}
                                 trigger={
                                   <DropdownMenuItem
@@ -388,11 +505,11 @@ export default async function ClesPage({
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      );
-                    })()}
-                  </TableCell>
-                </TableRow>
-              ))}
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
