@@ -270,19 +270,29 @@ export default async function HistoriquePage({
                       </TableCell>
                       <TableCell className="text-sm">
                         {bien ? (
-                          <div className="flex flex-col">
-                            <span>{bien.nom}</span>
+                          <Link
+                            href={`/biens/${bien.id}`}
+                            className="hover:text-primary group flex flex-col transition-colors"
+                          >
+                            <span className="group-hover:underline group-hover:underline-offset-4">
+                              {bien.nom}
+                            </span>
                             <span className="text-muted-foreground text-xs">
                               {bien.ville}
                             </span>
-                          </div>
+                          </Link>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell className="text-sm">
                         {personne ? (
-                          `${personne.prenom} ${personne.nom}`
+                          <Link
+                            href={`/personnes/${personne.id}`}
+                            className="text-primary underline-offset-4 transition-colors hover:underline"
+                          >
+                            {personne.prenom} {personne.nom}
+                          </Link>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}

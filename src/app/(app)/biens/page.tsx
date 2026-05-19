@@ -1,4 +1,5 @@
 import { MoreHorizontal, Plus } from "lucide-react";
+import Link from "next/link";
 
 import { BienFormDialog } from "@/components/clavis/biens/bien-form-dialog";
 import { BiensFilters } from "@/components/clavis/biens/biens-filters";
@@ -186,7 +187,14 @@ export default async function BiensPage({
             <TableBody>
               {biens.map((bien) => (
                 <TableRow key={bien.id}>
-                  <TableCell className="font-medium">{bien.nom}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      href={`/biens/${bien.id}`}
+                      className="text-primary underline-offset-4 transition-colors hover:underline"
+                    >
+                      {bien.nom}
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
                     {bien.adresse_complete}
                   </TableCell>

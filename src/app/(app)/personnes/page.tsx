@@ -1,5 +1,7 @@
 import { Mail, MoreHorizontal, Phone, Plus } from "lucide-react";
+import Link from "next/link";
 
+import { PhoneLink } from "@/components/clavis/phone-link";
 import { DeletePersonneDialog } from "@/components/clavis/personnes/delete-personne-dialog";
 import { PersonneFormDialog } from "@/components/clavis/personnes/personne-form-dialog";
 import { PersonnesFilters } from "@/components/clavis/personnes/personnes-filters";
@@ -191,19 +193,27 @@ export default async function PersonnesPage({
               {personnes.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-medium">
-                    {p.prenom} {p.nom}
+                    <Link
+                      href={`/personnes/${p.id}`}
+                      className="text-primary underline-offset-4 transition-colors hover:underline"
+                    >
+                      {p.prenom} {p.nom}
+                    </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     <div className="flex flex-col gap-0.5 text-xs">
                       <span className="inline-flex items-center gap-1.5">
                         <Phone aria-hidden className="size-3" />
-                        {p.telephone}
+                        <PhoneLink phone={p.telephone} />
                       </span>
                       {p.email && (
-                        <span className="inline-flex items-center gap-1.5">
+                        <a
+                          href={`mailto:${p.email}`}
+                          className="hover:text-primary inline-flex items-center gap-1.5 transition-colors hover:underline"
+                        >
                           <Mail aria-hidden className="size-3" />
                           {p.email}
-                        </span>
+                        </a>
                       )}
                     </div>
                   </TableCell>

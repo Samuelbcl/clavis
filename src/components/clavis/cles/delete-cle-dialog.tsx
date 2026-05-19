@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
-import { deletePersonne } from "@/app/(app)/personnes/actions";
+import { deleteCle } from "@/app/(app)/cles/actions";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,14 +17,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export function DeletePersonneDialog({
-  personneId,
-  personneNom,
+export function DeleteCleDialog({
+  cleId,
+  cleCode,
   trigger,
   redirectTo,
 }: {
-  personneId: string;
-  personneNom: string;
+  cleId: string;
+  cleCode: string;
   trigger: React.ReactElement;
   redirectTo?: string;
 }) {
@@ -34,9 +34,9 @@ export function DeletePersonneDialog({
 
   function onConfirm() {
     startTransition(async () => {
-      const result = await deletePersonne(personneId);
+      const result = await deleteCle(cleId);
       if (result.ok) {
-        toast.success(result.message ?? "Personne supprimée");
+        toast.success(result.message ?? "Clé supprimée");
         setOpen(false);
         if (redirectTo) router.push(redirectTo);
       } else {
@@ -50,12 +50,11 @@ export function DeletePersonneDialog({
       <AlertDialogTrigger render={trigger} />
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Supprimer cette personne ?</AlertDialogTitle>
+          <AlertDialogTitle>Supprimer la clé {cleCode} ?</AlertDialogTitle>
           <AlertDialogDescription>
-            <span className="font-medium">{personneNom}</span> sera retiré
-            définitivement. Si elle apparaît dans l'historique des mouvements,
-            la suppression sera bloquée — utilise plutôt l'édition pour
-            l'archiver.
+            Suppression définitive. Cette action n'est possible que si la clé
+            n'a aucun mouvement enregistré. Sinon, archive-la plutôt pour
+            préserver l'historique.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -65,7 +64,7 @@ export function DeletePersonneDialog({
             onClick={onConfirm}
             disabled={pending}
           >
-            {pending ? "Suppression…" : "Supprimer"}
+            {pending ? "Suppression…" : "Supprimer définitivement"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

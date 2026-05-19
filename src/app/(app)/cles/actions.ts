@@ -274,6 +274,108 @@ export async function recupererCle(input: {
   }
 }
 
+// Suppression définitive d'une clé : autorisée uniquement si elle n'a
+// jamais eu de mouvement. Sinon on force l'archivage (préserve l'audit).
+export async function deleteCle(id: string): Promise<ActionResult> {
+  try {
+    const user = await getCurrentUser();
+    if (user.role !== "admin") {
+      return { ok: false, message: "Suppression réservée à l'admin." };
+    }
+
+    const supabase = await createClient();
+
+    // Compte les mouvements liés à cette clé.
+    const { count, error: countError } = await supabase
+      .from("mouvements")
+      .select("id", { count: "exact", head: true })
+      .eq("cle_id", id);
+
+    if (countError) {
+      console.error("[cles/delete] count error:", countError);
+      return { ok: false, message: countError.message };
+    }
+
+    if ((count ?? 0) > 0) {
+      return {
+        ok: false,
+        message:
+          "Cette clé a un historique de mouvements. Tu peux seulement l'archiver pour préserver l'audit trail.",
+      };
+    }
+
+    const { error, data } = await supabase
+      .from("cles")
+      .delete()
+      .eq("id", id)
+      .select("id, code");
+
+    if (error) {
+      console.error("[cles/delete] supabase error:", error);
+      return { ok: false, message: error.message };
+    }
+    if (!data || data.length === 0) {
+      return { ok: false, message: "Clé introuvable." };
+    }
+
+    revalidatePath("/cles");
+    return { ok: true, message: `Clé ${data[0].code} supprimée.` };
+  } catch (err) {
+    return unexpectedError("delete", err);
+  }
+}
+
+// Déclare une clé perdue : INSERT mouvement type='perte', le trigger DB
+// passe la clé en statut 'perdue' et clear le détenteur actuel.
+export async function declarerPerdueCle(input: {
+  cleId: string;
+  notes?: string;
+}): Promise<ActionResult<{ mouvementId: string }>> {
+  try {
+    if (!input.cleId) {
+      return { ok: false, message: "Clé requise." };
+    }
+
+    const user = await getCurrentUser();
+    const supabase = await createClient();
+
+    // On garde le détenteur actuel (s'il y en a) dans le mouvement, pour
+    // l'historique : 'qui détenait la clé au moment où elle a été perdue ?'.
+    const { data: cle } = await supabase
+      .from("cles")
+      .select("personne_actuelle_id")
+      .eq("id", input.cleId)
+      .single();
+
+    const { data, error } = await supabase
+      .from("mouvements")
+      .insert({
+        cle_id: input.cleId,
+        personne_id: cle?.personne_actuelle_id ?? null,
+        type: "perte",
+        operateur_id: user.id,
+        notes: input.notes?.trim() || null,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error("[cles/declarerPerdue] supabase error:", error);
+      return { ok: false, message: error.message };
+    }
+
+    revalidatePath("/cles");
+    revalidatePath("/historique");
+    return {
+      ok: true,
+      data: { mouvementId: data.id },
+      message: "Clé déclarée perdue.",
+    };
+  } catch (err) {
+    return unexpectedError("declarerPerdue", err);
+  }
+}
+
 // Toggle archivage : 'archivee' <-> 'disponible'.
 // On ne supprime jamais une clé (les mouvements doivent rester traçables).
 export async function setCleArchive(

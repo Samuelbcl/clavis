@@ -10,6 +10,7 @@ import {
   Phone,
   RefreshCw,
   ShieldX,
+  Trash2,
   Undo2,
   User,
 } from "lucide-react";
@@ -18,8 +19,11 @@ import { notFound } from "next/navigation";
 
 import { ArchiveCleDialog } from "@/components/clavis/cles/archive-cle-dialog";
 import { CleFormDialog } from "@/components/clavis/cles/cle-form-dialog";
+import { DeclarerPerdueDialog } from "@/components/clavis/cles/declarer-perdue-dialog";
+import { DeleteCleDialog } from "@/components/clavis/cles/delete-cle-dialog";
 import { RecupererCleDialog } from "@/components/clavis/cles/recuperer-cle-dialog";
 import { RemettreCleDialog } from "@/components/clavis/cles/remettre-cle-dialog";
+import { PhoneLink } from "@/components/clavis/phone-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -154,6 +158,10 @@ export default async function CleDetailPage({
 
   const canRemettre = cleStatut === "disponible";
   const canRecuperer = cleStatut === "remise";
+  const canDeclarerPerdue =
+    cleStatut !== "perdue" &&
+    cleStatut !== "archivee" &&
+    cleStatut !== "refaite";
   const isAdmin = user.role === "admin";
   const detenteurLabel =
     cle.personne_nom && cle.personne_prenom
@@ -215,6 +223,19 @@ export default async function CleDetailPage({
               }
             />
           )}
+          {canDeclarerPerdue && (
+            <DeclarerPerdueDialog
+              cleId={cleId}
+              cleCode={cleCode}
+              detenteurLabel={detenteurLabel}
+              trigger={
+                <Button variant="outline">
+                  <ShieldX aria-hidden />
+                  Déclarer perdue
+                </Button>
+              }
+            />
+          )}
           {isAdmin && (
             <CleFormDialog
               mode="edit"
@@ -260,6 +281,19 @@ export default async function CleDetailPage({
               }
             />
           )}
+          {isAdmin && (
+            <DeleteCleDialog
+              cleId={cleId}
+              cleCode={cleCode}
+              redirectTo="/cles"
+              trigger={
+                <Button variant="outline">
+                  <Trash2 aria-hidden />
+                  Supprimer
+                </Button>
+              }
+            />
+          )}
         </div>
       </header>
 
@@ -273,9 +307,14 @@ export default async function CleDetailPage({
               <span className="font-mono">{cleCode}</span>
             </InfoRow>
             <InfoRow icon={Building2} label="Bien">
-              {cle.bien_nom ? (
+              {cle.bien_nom && cleBienId ? (
                 <div>
-                  <div>{cle.bien_nom}</div>
+                  <Link
+                    href={`/biens/${cleBienId}`}
+                    className="text-primary underline-offset-4 transition-colors hover:underline"
+                  >
+                    {cle.bien_nom}
+                  </Link>
                   <div className="text-muted-foreground text-xs">
                     {cle.bien_adresse_complete}, {cle.bien_code_postal}{" "}
                     {cle.bien_ville}
@@ -306,14 +345,28 @@ export default async function CleDetailPage({
             {detenteurLabel ? (
               <>
                 <InfoRow icon={User} label="Nom">
-                  {detenteurLabel}
+                  {cle.personne_actuelle_id ? (
+                    <Link
+                      href={`/personnes/${cle.personne_actuelle_id}`}
+                      className="text-primary underline-offset-4 transition-colors hover:underline"
+                    >
+                      {detenteurLabel}
+                    </Link>
+                  ) : (
+                    detenteurLabel
+                  )}
                 </InfoRow>
                 <InfoRow icon={Phone} label="Téléphone">
-                  {cle.personne_telephone}
+                  <PhoneLink phone={cle.personne_telephone} />
                 </InfoRow>
                 {cle.personne_email && (
                   <InfoRow icon={Mail} label="Email">
-                    {cle.personne_email}
+                    <a
+                      href={`mailto:${cle.personne_email}`}
+                      className="hover:text-primary transition-colors hover:underline"
+                    >
+                      {cle.personne_email}
+                    </a>
                   </InfoRow>
                 )}
               </>

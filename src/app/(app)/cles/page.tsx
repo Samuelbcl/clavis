@@ -6,6 +6,8 @@ import {
   MoreHorizontal,
   Phone,
   Plus,
+  ShieldX,
+  Trash2,
   Undo2,
 } from "lucide-react";
 import Link from "next/link";
@@ -13,9 +15,12 @@ import Link from "next/link";
 import { ArchiveCleDialog } from "@/components/clavis/cles/archive-cle-dialog";
 import { CleFormDialog } from "@/components/clavis/cles/cle-form-dialog";
 import { ClesFilters } from "@/components/clavis/cles/cles-filters";
+import { DeclarerPerdueDialog } from "@/components/clavis/cles/declarer-perdue-dialog";
+import { DeleteCleDialog } from "@/components/clavis/cles/delete-cle-dialog";
 import { RecupererCleDialog } from "@/components/clavis/cles/recuperer-cle-dialog";
 import { RemettreCleDialog } from "@/components/clavis/cles/remettre-cle-dialog";
 import { SortableHeader } from "@/components/clavis/cles/sortable-header";
+import { PhoneLink } from "@/components/clavis/phone-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -338,7 +343,12 @@ export default async function ClesPage({
                 const cleBienId = c.bien_id!;
                 const canRemettre = cleStatut === "disponible";
                 const canRecuperer = cleStatut === "remise";
-                const hasMouvementAction = canRemettre || canRecuperer;
+                const canDeclarerPerdue =
+                  cleStatut !== "perdue" &&
+                  cleStatut !== "archivee" &&
+                  cleStatut !== "refaite";
+                const hasMouvementAction =
+                  canRemettre || canRecuperer || canDeclarerPerdue;
                 const showMenu = isAdmin || hasMouvementAction;
                 const bienLabel = c.bien_nom
                   ? `${c.bien_nom} — ${c.bien_ville ?? ""}`
@@ -359,13 +369,18 @@ export default async function ClesPage({
                       </Link>
                     </TableCell>
                     <TableCell>
-                      {c.bien_nom ? (
-                        <div className="flex flex-col">
-                          <span className="text-sm">{c.bien_nom}</span>
+                      {c.bien_nom && c.bien_id ? (
+                        <Link
+                          href={`/biens/${c.bien_id}`}
+                          className="hover:text-primary group flex flex-col transition-colors"
+                        >
+                          <span className="text-sm group-hover:underline group-hover:underline-offset-4">
+                            {c.bien_nom}
+                          </span>
                           <span className="text-muted-foreground text-xs">
                             {c.bien_ville}
                           </span>
-                        </div>
+                        </Link>
                       ) : (
                         <span className="text-muted-foreground text-sm">—</span>
                       )}
@@ -379,20 +394,30 @@ export default async function ClesPage({
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      {detenteurLabel ? (
+                      {detenteurLabel && c.personne_actuelle_id ? (
                         <div className="flex flex-col">
-                          <span className="text-sm">{detenteurLabel}</span>
+                          <Link
+                            href={`/personnes/${c.personne_actuelle_id}`}
+                            className="text-primary text-sm underline-offset-4 transition-colors hover:underline"
+                          >
+                            {detenteurLabel}
+                          </Link>
                           <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
                             <Phone aria-hidden className="size-3" />
-                            {c.personne_telephone}
+                            <PhoneLink phone={c.personne_telephone} />
                           </span>
                           {c.personne_email && (
-                            <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+                            <a
+                              href={`mailto:${c.personne_email}`}
+                              className="text-muted-foreground hover:text-primary inline-flex items-center gap-1 text-xs transition-colors hover:underline"
+                            >
                               <Mail aria-hidden className="size-3" />
                               {c.personne_email}
-                            </span>
+                            </a>
                           )}
                         </div>
+                      ) : detenteurLabel ? (
+                        <span className="text-sm">{detenteurLabel}</span>
                       ) : (
                         <span className="text-muted-foreground text-sm">—</span>
                       )}
@@ -453,6 +478,22 @@ export default async function ClesPage({
                                 }
                               />
                             )}
+                            {canDeclarerPerdue && (
+                              <DeclarerPerdueDialog
+                                cleId={cleId}
+                                cleCode={cleCode}
+                                detenteurLabel={detenteurLabel}
+                                trigger={
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    closeOnClick={false}
+                                  >
+                                    <ShieldX aria-hidden />
+                                    Déclarer perdue
+                                  </DropdownMenuItem>
+                                }
+                              />
+                            )}
                             {isAdmin && hasMouvementAction && (
                               <DropdownMenuSeparator />
                             )}
@@ -494,12 +535,24 @@ export default async function ClesPage({
                                 cleCode={cleCode}
                                 archive={true}
                                 trigger={
+                                  <DropdownMenuItem closeOnClick={false}>
+                                    <Archive aria-hidden />
+                                    Archiver
+                                  </DropdownMenuItem>
+                                }
+                              />
+                            )}
+                            {isAdmin && (
+                              <DeleteCleDialog
+                                cleId={cleId}
+                                cleCode={cleCode}
+                                trigger={
                                   <DropdownMenuItem
                                     variant="destructive"
                                     closeOnClick={false}
                                   >
-                                    <Archive aria-hidden />
-                                    Archiver
+                                    <Trash2 aria-hidden />
+                                    Supprimer
                                   </DropdownMenuItem>
                                 }
                               />

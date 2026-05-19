@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
@@ -20,11 +21,16 @@ export function DeleteBienDialog({
   bienId,
   bienNom,
   trigger,
+  redirectTo,
 }: {
   bienId: string;
   bienNom: string;
   trigger: React.ReactElement;
+  /** Si fourni, le user est redirigé vers cette URL après suppression réussie
+   *  (utile quand on supprime depuis la fiche détaillée — sinon 404). */
+  redirectTo?: string;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -34,6 +40,7 @@ export function DeleteBienDialog({
       if (result.ok) {
         toast.success(result.message ?? "Bien supprimé");
         setOpen(false);
+        if (redirectTo) router.push(redirectTo);
       } else {
         toast.error(result.message);
       }
