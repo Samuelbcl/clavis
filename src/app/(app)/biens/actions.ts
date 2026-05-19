@@ -48,79 +48,101 @@ function zodToActionError<T>(error: z.ZodError): ActionResult<T> {
   return { ok: false, message: "Validation échouée", fieldErrors };
 }
 
+function unexpectedError<T>(action: string, err: unknown): ActionResult<T> {
+  const message = err instanceof Error ? err.message : String(err);
+  // Visible dans Vercel Runtime Logs.
+  console.error(`[biens/${action}] unhandled:`, err);
+  return { ok: false, message: `Erreur serveur (${action}) : ${message}` };
+}
+
 export async function createBien(
   input: BienInput,
 ): Promise<ActionResult<{ id: string }>> {
-  const parsed = bienSchema.safeParse(input);
-  if (!parsed.success) return zodToActionError(parsed.error);
+  try {
+    const parsed = bienSchema.safeParse(input);
+    if (!parsed.success) return zodToActionError(parsed.error);
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("biens")
-    .insert(parsed.data)
-    .select("id")
-    .single();
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("biens")
+      .insert(parsed.data)
+      .select("id")
+      .single();
 
-  if (error) return { ok: false, message: error.message };
+    if (error) {
+      console.error("[biens/create] supabase error:", error);
+      return { ok: false, message: error.message };
+    }
 
-  revalidatePath("/biens");
-  return { ok: true, data: { id: data.id }, message: "Bien créé." };
+    revalidatePath("/biens");
+    return { ok: true, data: { id: data.id }, message: "Bien créé." };
+  } catch (err) {
+    return unexpectedError("create", err);
+  }
 }
 
 export async function updateBien(
   id: string,
   input: BienInput,
 ): Promise<ActionResult> {
-  const parsed = bienSchema.safeParse(input);
-  if (!parsed.success) return zodToActionError(parsed.error);
+  try {
+    const parsed = bienSchema.safeParse(input);
+    if (!parsed.success) return zodToActionError(parsed.error);
 
-  const supabase = await createClient();
-  const { error, data } = await supabase
-    .from("biens")
-    .update(parsed.data)
-    .eq("id", id)
-    .select("id");
+    const supabase = await createClient();
+    const { error, data } = await supabase
+      .from("biens")
+      .update(parsed.data)
+      .eq("id", id)
+      .select("id");
 
-  if (error) return { ok: false, message: error.message };
-  if (!data || data.length === 0) {
-    return { ok: false, message: "Bien introuvable ou accès refusé." };
+    if (error) {
+      console.error("[biens/update] supabase error:", error);
+      return { ok: false, message: error.message };
+    }
+    if (!data || data.length === 0) {
+      return { ok: false, message: "Bien introuvable ou accès refusé." };
+    }
+
+    revalidatePath("/biens");
+    return { ok: true, message: "Bien mis à jour." };
+  } catch (err) {
+    return unexpectedError("update", err);
   }
-
-  revalidatePath("/biens");
-  return { ok: true, message: "Bien mis à jour." };
 }
 
 export async function deleteBien(id: string): Promise<ActionResult> {
-  // Garde-fou côté app : seul l'admin peut supprimer (RLS le bloquerait aussi,
-  // mais le message d'erreur est plus clair côté UI).
-  const user = await getCurrentUser();
-  if (user.role !== "admin") {
-    return { ok: false, message: "Suppression réservée à l'admin." };
-  }
-
-  const supabase = await createClient();
-  const { error, data } = await supabase
-    .from("biens")
-    .delete()
-    .eq("id", id)
-    .select("id");
-
-  if (error) {
-    // Cas typique : des mouvements existent sur des clés rattachées
-    // (mouvements.cle_id ON DELETE RESTRICT) → contrainte FK violée.
-    if (error.code === "23503") {
-      return {
-        ok: false,
-        message:
-          "Impossible de supprimer : ce bien a des clés avec des mouvements enregistrés. Archive-le plutôt.",
-      };
+  try {
+    const user = await getCurrentUser();
+    if (user.role !== "admin") {
+      return { ok: false, message: "Suppression réservée à l'admin." };
     }
-    return { ok: false, message: error.message };
-  }
-  if (!data || data.length === 0) {
-    return { ok: false, message: "Bien introuvable." };
-  }
 
-  revalidatePath("/biens");
-  return { ok: true, message: "Bien supprimé." };
+    const supabase = await createClient();
+    const { error, data } = await supabase
+      .from("biens")
+      .delete()
+      .eq("id", id)
+      .select("id");
+
+    if (error) {
+      console.error("[biens/delete] supabase error:", error);
+      if (error.code === "23503") {
+        return {
+          ok: false,
+          message:
+            "Impossible de supprimer : ce bien a des clés avec des mouvements enregistrés. Archive-le plutôt.",
+        };
+      }
+      return { ok: false, message: error.message };
+    }
+    if (!data || data.length === 0) {
+      return { ok: false, message: "Bien introuvable." };
+    }
+
+    revalidatePath("/biens");
+    return { ok: true, message: "Bien supprimé." };
+  } catch (err) {
+    return unexpectedError("delete", err);
+  }
 }
