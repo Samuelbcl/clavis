@@ -193,7 +193,7 @@ export function HistoriqueFilters() {
             </div>
 
             {isCustom && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <Label
                     htmlFor="f-from"
@@ -243,7 +243,11 @@ export function HistoriqueFilters() {
                 }
               >
                 <SelectTrigger id="f-type" className="w-full">
-                  <SelectValue />
+                  <SelectValue>
+                    {(val: string) =>
+                      TYPE_OPTIONS.find((o) => o.value === val)?.label ?? val
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {TYPE_OPTIONS.map((opt) => (

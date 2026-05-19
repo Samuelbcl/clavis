@@ -200,7 +200,11 @@ export function BienFormDialog({
               disabled={pending}
             >
               <SelectTrigger id="type" className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {(val: string) =>
+                    TYPE_LABELS[val as BienType] ?? val
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {(Object.keys(TYPE_LABELS) as BienType[]).map((t) => (

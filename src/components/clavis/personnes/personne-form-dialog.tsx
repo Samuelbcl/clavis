@@ -187,7 +187,11 @@ export function PersonneFormDialog({
                 disabled={pending}
               >
                 <SelectTrigger id="type" className="w-full">
-                  <SelectValue />
+                  <SelectValue>
+                    {(val: string) =>
+                      TYPE_LABELS[val as PersonneType] ?? val
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {(Object.keys(TYPE_LABELS) as PersonneType[]).map((t) => (
@@ -198,13 +202,23 @@ export function PersonneFormDialog({
                 </SelectContent>
               </Select>
             </Field>
-            <Field id="metier" label="Métier (optionnel)" error={errors.metier}>
+            <Field
+              id="metier"
+              label={
+                values.type === "autre"
+                  ? "Précisez le type"
+                  : "Métier (optionnel)"
+              }
+              error={errors.metier}
+            >
               <Input
                 id="metier"
                 maxLength={100}
                 value={values.metier ?? ""}
                 onChange={(e) => set("metier", e.target.value)}
-                placeholder="Plombier"
+                placeholder={
+                  values.type === "autre" ? "Huissier, ami…" : "Plombier"
+                }
                 disabled={pending}
               />
             </Field>

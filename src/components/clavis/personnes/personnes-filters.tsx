@@ -159,7 +159,11 @@ export function PersonnesFilters() {
                 }}
               >
                 <SelectTrigger id="f-type" className="w-full">
-                  <SelectValue />
+                  <SelectValue>
+                    {(val: string) =>
+                      TYPE_OPTIONS.find((o) => o.value === val)?.label ?? val
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {TYPE_OPTIONS.map((opt) => (

@@ -20,6 +20,11 @@ export const metadata: Metadata = {
   description: "Gestion des clés du parc immobilier",
 };
 
+// Place les Server Components et Server Actions au plus pres de Supabase
+// (projet en eu-central-1 Frankfurt). Reduit la latence des queries DB de
+// ~100-200ms vs region US par defaut sur Vercel.
+export const preferredRegion = "fra1";
+
 export default function RootLayout({
   children,
 }: Readonly<{

@@ -171,7 +171,11 @@ export function ClesFilters({
                 }
               >
                 <SelectTrigger id="f-statut" className="w-full">
-                  <SelectValue />
+                  <SelectValue>
+                    {(val: string) =>
+                      STATUT_OPTIONS.find((o) => o.value === val)?.label ?? val
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {STATUT_OPTIONS.map((opt) => (
@@ -191,7 +195,11 @@ export function ClesFilters({
                 }
               >
                 <SelectTrigger id="f-type" className="w-full">
-                  <SelectValue />
+                  <SelectValue>
+                    {(val: string) =>
+                      TYPE_OPTIONS.find((o) => o.value === val)?.label ?? val
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {TYPE_OPTIONS.map((opt) => (
@@ -212,7 +220,13 @@ export function ClesFilters({
                   }
                 >
                   <SelectTrigger id="f-bien" className="w-full">
-                    <SelectValue />
+                    <SelectValue>
+                      {(val: string) => {
+                        if (val === "all") return "Tous les biens";
+                        const b = biens.find((b) => b.id === val);
+                        return b ? `${b.nom} — ${b.ville}` : val;
+                      }}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tous les biens</SelectItem>
@@ -234,7 +248,12 @@ export function ClesFilters({
                 }
               >
                 <SelectTrigger id="f-pt" className="w-full">
-                  <SelectValue />
+                  <SelectValue>
+                    {(val: string) =>
+                      PERSONNE_TYPE_OPTIONS.find((o) => o.value === val)
+                        ?.label ?? val
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {PERSONNE_TYPE_OPTIONS.map((opt) => (

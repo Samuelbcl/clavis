@@ -120,7 +120,14 @@ export function RemettreCleDialog({
                 disabled={pending}
               >
                 <SelectTrigger id="personne_id" className="w-full">
-                  <SelectValue placeholder="Choisis une personne" />
+                  <SelectValue placeholder="Choisis une personne">
+                    {(val: string) => {
+                      const p = personnes.find((x) => x.id === val);
+                      return p
+                        ? `${p.prenom} ${p.nom} — ${TYPE_SHORT[p.type] ?? p.type}`
+                        : val;
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {personnes.map((p) => (

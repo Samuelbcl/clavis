@@ -153,7 +153,12 @@ export function CleFormDialog({
                 disabled={pending}
               >
                 <SelectTrigger id="bien_id" className="w-full">
-                  <SelectValue placeholder="Choisis un bien" />
+                  <SelectValue placeholder="Choisis un bien">
+                    {(val: string) => {
+                      const b = biens.find((b) => b.id === val);
+                      return b ? `${b.nom} — ${b.ville}` : val;
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {biens.map((b) => (
@@ -193,7 +198,11 @@ export function CleFormDialog({
                   disabled={pending}
                 >
                   <SelectTrigger id="type" className="w-full">
-                    <SelectValue />
+                    <SelectValue>
+                      {(val: string) =>
+                        TYPE_LABELS[val as CleType] ?? val
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(TYPE_LABELS) as CleType[]).map((t) => (
