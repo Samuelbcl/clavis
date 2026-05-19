@@ -8,6 +8,7 @@ import {
   Plus,
   Undo2,
 } from "lucide-react";
+import Link from "next/link";
 
 import { ArchiveCleDialog } from "@/components/clavis/cles/archive-cle-dialog";
 import { CleFormDialog } from "@/components/clavis/cles/cle-form-dialog";
@@ -355,7 +356,12 @@ export default async function ClesPage({
                 return (
                   <TableRow key={cleId}>
                     <TableCell className="font-mono font-medium">
-                      {cleCode}
+                      <Link
+                        href={`/cles/${cleId}`}
+                        className="hover:underline focus-visible:underline focus-visible:outline-none"
+                      >
+                        {cleCode}
+                      </Link>
                     </TableCell>
                     <TableCell>
                       {c.bien_nom ? (

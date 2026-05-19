@@ -1,0 +1,416 @@
+import {
+  Archive,
+  ArchiveRestore,
+  Building2,
+  ChevronLeft,
+  HandCoins,
+  Hash,
+  Mail,
+  Pencil,
+  Phone,
+  RefreshCw,
+  ShieldX,
+  Undo2,
+  User,
+} from "lucide-react";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { ArchiveCleDialog } from "@/components/clavis/cles/archive-cle-dialog";
+import { CleFormDialog } from "@/components/clavis/cles/cle-form-dialog";
+import { RecupererCleDialog } from "@/components/clavis/cles/recuperer-cle-dialog";
+import { RemettreCleDialog } from "@/components/clavis/cles/remettre-cle-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/database";
+
+type CleStatut = Database["public"]["Enums"]["cle_statut"];
+type CleType = Database["public"]["Enums"]["cle_type"];
+type MouvementType = Database["public"]["Enums"]["mouvement_type"];
+
+const TYPE_LABELS: Record<CleType, string> = {
+  porte_entree: "Porte d'entrée",
+  garage: "Garage",
+  cave: "Cave",
+  boite_aux_lettres: "Boîte aux lettres",
+  badge_immeuble: "Badge immeuble",
+  autre: "Autre",
+};
+
+const STATUT_LABELS: Record<CleStatut, string> = {
+  disponible: "Disponible",
+  remise: "Remise",
+  perdue: "Perdue",
+  refaite: "Refaite",
+  archivee: "Archivée",
+};
+
+const STATUT_VARIANT: Record<
+  CleStatut,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
+  disponible: "default",
+  remise: "secondary",
+  perdue: "destructive",
+  refaite: "outline",
+  archivee: "outline",
+};
+
+const MOUVEMENT_LABELS: Record<MouvementType, string> = {
+  remise: "Remise",
+  retour: "Retour au bureau",
+  perte: "Déclarée perdue",
+  refaite: "Refaite",
+};
+
+const MOUVEMENT_ICONS: Record<
+  MouvementType,
+  React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>
+> = {
+  remise: HandCoins,
+  retour: Undo2,
+  perte: ShieldX,
+  refaite: RefreshCw,
+};
+
+const MOUVEMENT_RING: Record<MouvementType, string> = {
+  remise: "ring-amber-500 bg-amber-100 text-amber-900",
+  retour: "ring-emerald-500 bg-emerald-100 text-emerald-900",
+  perte: "ring-destructive bg-destructive/15 text-destructive",
+  refaite: "ring-blue-500 bg-blue-100 text-blue-900",
+};
+
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString("fr-BE", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export default async function CleDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const user = await getCurrentUser();
+  const supabase = await createClient();
+
+  const { data: cle, error: cleError } = await supabase
+    .from("cles_view")
+    .select(
+      `id, code, type, statut, description, bien_id, personne_actuelle_id, created_at, updated_at,
+       bien_nom, bien_adresse_complete, bien_code_postal, bien_ville, bien_type,
+       personne_nom, personne_prenom, personne_telephone, personne_email, personne_type`,
+    )
+    .eq("id", id)
+    .single();
+
+  if (cleError || !cle || !cle.id || !cle.code) {
+    notFound();
+  }
+
+  const cleId = cle.id;
+  const cleCode = cle.code;
+  const cleType = cle.type!;
+  const cleStatut = cle.statut!;
+  const cleBienId = cle.bien_id!;
+
+  // Liste des biens pour le dialog d'édition
+  const { data: biensRaw } = await supabase
+    .from("biens")
+    .select("id, nom, ville")
+    .order("nom");
+  const biens = biensRaw ?? [];
+
+  // Personnes pour le dialog de remise
+  const { data: personnesRaw } = await supabase
+    .from("personnes")
+    .select("id, nom, prenom, type")
+    .order("nom")
+    .order("prenom");
+  const personnes = personnesRaw ?? [];
+
+  // Historique des mouvements
+  const { data: mouvementsRaw } = await supabase
+    .from("mouvements")
+    .select(
+      `id, type, date_mouvement, notes, confirmee_par_receveur, date_confirmation,
+       personne:personnes (id, nom, prenom, telephone, type),
+       operateur:users!mouvements_operateur_id_fkey (id, nom, prenom)`,
+    )
+    .eq("cle_id", cleId)
+    .order("date_mouvement", { ascending: false });
+  const mouvements = mouvementsRaw ?? [];
+
+  const canRemettre = cleStatut === "disponible";
+  const canRecuperer = cleStatut === "remise";
+  const isAdmin = user.role === "admin";
+  const detenteurLabel =
+    cle.personne_nom && cle.personne_prenom
+      ? `${cle.personne_prenom} ${cle.personne_nom}`
+      : null;
+  const bienLabel = cle.bien_nom
+    ? `${cle.bien_nom} — ${cle.bien_ville ?? ""}`
+    : "—";
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <Button variant="ghost" size="sm" render={<Link href="/cles" />}>
+          <ChevronLeft aria-hidden />
+          Toutes les clés
+        </Button>
+      </div>
+
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="font-mono text-2xl font-bold tracking-tight">
+              {cleCode}
+            </h1>
+            <Badge variant={STATUT_VARIANT[cleStatut]}>
+              {STATUT_LABELS[cleStatut]}
+            </Badge>
+          </div>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {TYPE_LABELS[cleType]} — {bienLabel}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {canRemettre && (
+            <RemettreCleDialog
+              cleId={cleId}
+              cleCode={cleCode}
+              bienLabel={bienLabel}
+              personnes={personnes}
+              trigger={
+                <Button>
+                  <HandCoins aria-hidden />
+                  Remettre
+                </Button>
+              }
+            />
+          )}
+          {canRecuperer && (
+            <RecupererCleDialog
+              cleId={cleId}
+              cleCode={cleCode}
+              detenteurLabel={detenteurLabel}
+              trigger={
+                <Button>
+                  <Undo2 aria-hidden />
+                  Récupérer
+                </Button>
+              }
+            />
+          )}
+          {isAdmin && (
+            <CleFormDialog
+              mode="edit"
+              cle={{
+                id: cleId,
+                bien_id: cleBienId,
+                code: cleCode,
+                type: cleType,
+                description: cle.description,
+              }}
+              biens={biens}
+              trigger={
+                <Button variant="outline">
+                  <Pencil aria-hidden />
+                  Éditer
+                </Button>
+              }
+            />
+          )}
+          {isAdmin && cleStatut === "archivee" && (
+            <ArchiveCleDialog
+              cleId={cleId}
+              cleCode={cleCode}
+              archive={false}
+              trigger={
+                <Button variant="outline">
+                  <ArchiveRestore aria-hidden />
+                  Réactiver
+                </Button>
+              }
+            />
+          )}
+          {isAdmin && cleStatut !== "archivee" && (
+            <ArchiveCleDialog
+              cleId={cleId}
+              cleCode={cleCode}
+              archive={true}
+              trigger={
+                <Button variant="outline">
+                  <Archive aria-hidden />
+                  Archiver
+                </Button>
+              }
+            />
+          )}
+        </div>
+      </header>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Informations</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <InfoRow icon={Hash} label="Code">
+              <span className="font-mono">{cleCode}</span>
+            </InfoRow>
+            <InfoRow icon={Building2} label="Bien">
+              {cle.bien_nom ? (
+                <div>
+                  <div>{cle.bien_nom}</div>
+                  <div className="text-muted-foreground text-xs">
+                    {cle.bien_adresse_complete}, {cle.bien_code_postal}{" "}
+                    {cle.bien_ville}
+                  </div>
+                </div>
+              ) : (
+                "—"
+              )}
+            </InfoRow>
+            {cle.description && (
+              <InfoRow icon={Pencil} label="Description">
+                {cle.description}
+              </InfoRow>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Détenteur actuel</CardTitle>
+            <CardDescription>
+              {cleStatut === "remise"
+                ? "Personne qui détient actuellement la clé."
+                : "La clé n'est pas remise."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {detenteurLabel ? (
+              <>
+                <InfoRow icon={User} label="Nom">
+                  {detenteurLabel}
+                </InfoRow>
+                <InfoRow icon={Phone} label="Téléphone">
+                  {cle.personne_telephone}
+                </InfoRow>
+                {cle.personne_email && (
+                  <InfoRow icon={Mail} label="Email">
+                    {cle.personne_email}
+                  </InfoRow>
+                )}
+              </>
+            ) : (
+              <p className="text-muted-foreground text-sm">—</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Historique</CardTitle>
+          <CardDescription>
+            {mouvements.length === 0
+              ? "Aucun mouvement enregistré."
+              : `${mouvements.length} mouvement${mouvements.length > 1 ? "s" : ""} dans l'ordre chronologique inverse.`}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {mouvements.length > 0 && (
+            <ol className="relative space-y-6 border-l pl-6">
+              {mouvements.map((m) => {
+                const Icon = MOUVEMENT_ICONS[m.type];
+                const personne = Array.isArray(m.personne)
+                  ? m.personne[0]
+                  : m.personne;
+                const operateur = Array.isArray(m.operateur)
+                  ? m.operateur[0]
+                  : m.operateur;
+                return (
+                  <li key={m.id} className="relative">
+                    <span
+                      className={`absolute -left-[37px] inline-flex size-6 items-center justify-center rounded-full ring-4 ring-background ${MOUVEMENT_RING[m.type]}`}
+                    >
+                      <Icon aria-hidden className="size-3.5" />
+                    </span>
+                    <div>
+                      <div className="flex flex-wrap items-baseline gap-2">
+                        <span className="text-sm font-medium">
+                          {MOUVEMENT_LABELS[m.type]}
+                        </span>
+                        {personne && (
+                          <span className="text-muted-foreground text-sm">
+                            → {personne.prenom} {personne.nom}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-muted-foreground text-xs">
+                        {formatDateTime(m.date_mouvement)}
+                        {operateur && (
+                          <>
+                            {" "}
+                            · par {operateur.prenom} {operateur.nom}
+                          </>
+                        )}
+                      </div>
+                      {m.notes && (
+                        <p className="mt-1 text-sm whitespace-pre-wrap">
+                          {m.notes}
+                        </p>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function InfoRow({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <Icon
+        aria-hidden
+        className="text-muted-foreground mt-0.5 size-4 shrink-0"
+      />
+      <div className="flex-1">
+        <div className="text-muted-foreground text-xs">{label}</div>
+        <div>{children}</div>
+      </div>
+    </div>
+  );
+}
