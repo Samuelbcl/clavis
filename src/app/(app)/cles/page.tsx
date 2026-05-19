@@ -353,7 +353,7 @@ export default async function ClesPage({
                     <TableCell className="font-mono font-medium">
                       <Link
                         href={`/cles/${cleId}`}
-                        className="hover:underline focus-visible:underline focus-visible:outline-none"
+                        className="text-primary underline-offset-4 transition-colors hover:underline focus-visible:underline focus-visible:outline-none"
                       >
                         {cleCode}
                       </Link>

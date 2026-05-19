@@ -1,11 +1,13 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -13,6 +15,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import type { Database } from "@/types/database";
 
 type CleType = Database["public"]["Enums"]["cle_type"];
@@ -66,6 +78,7 @@ export function ClesFilters({
   const bien = params.get("bien") ?? "all";
   const personneType = params.get("personne_type") ?? "all";
 
+  // Debounce search.
   useEffect(() => {
     const current = params.get("q") ?? "";
     if (q === current) return;
@@ -88,110 +101,193 @@ export function ClesFilters({
     });
   }
 
-  const hasFilters =
-    (params.get("q") ?? "") !== "" ||
-    statut !== "actives" ||
-    type !== "all" ||
-    bien !== "all" ||
-    personneType !== "all";
+  // Compte les filtres autres que la recherche (le bouton "Filtres" reflète
+  // ces filtres-là, la search étant toujours visible).
+  const activeFilters = [
+    statut !== "actives",
+    type !== "all",
+    bien !== "all",
+    personneType !== "all",
+  ].filter(Boolean).length;
+
+  function resetSheetFilters() {
+    pushParams({
+      statut: null,
+      type: null,
+      bien: null,
+      personne_type: null,
+    });
+  }
+
+  function resetAll() {
+    setQ("");
+    startTransition(() => router.push(pathname));
+  }
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-      <div className="relative flex-1 sm:max-w-xs">
+    <div className="flex items-center gap-2">
+      <div className="relative flex-1 sm:max-w-md">
         <Search
           aria-hidden
-          className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+          className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
         />
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Code, description…"
-          className="pl-8"
+          placeholder="Code, bien, adresse, personne, téléphone…"
+          className="h-10 pl-9"
         />
       </div>
 
-      <Select
-        value={statut}
-        onValueChange={(v) => pushParams({ statut: v === "actives" ? null : v })}
-      >
-        <SelectTrigger className="w-full sm:w-48">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {STATUT_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <Sheet>
+        <SheetTrigger
+          render={
+            <Button variant="outline" className="h-10 gap-2">
+              <SlidersHorizontal aria-hidden className="size-4" />
+              <span className="hidden sm:inline">Filtres</span>
+              {activeFilters > 0 && (
+                <Badge variant="secondary" className="ml-0.5 h-5 px-1.5">
+                  {activeFilters}
+                </Badge>
+              )}
+            </Button>
+          }
+        />
+        <SheetContent className="w-full sm:max-w-md">
+          <SheetHeader className="border-b">
+            <SheetTitle>Filtres</SheetTitle>
+            <SheetDescription>
+              Affine ton tableau de clés selon le statut, le type, le bien ou
+              le détenteur.
+            </SheetDescription>
+          </SheetHeader>
 
-      <Select
-        value={type}
-        onValueChange={(v) => pushParams({ type: v === "all" ? null : v })}
-      >
-        <SelectTrigger className="w-full sm:w-48">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {TYPE_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
+            <FilterField id="f-statut" label="Statut">
+              <Select
+                value={statut}
+                onValueChange={(v) =>
+                  pushParams({ statut: v === "actives" ? null : v })
+                }
+              >
+                <SelectTrigger id="f-statut" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterField>
 
-      {biens.length > 0 && (
-        <Select
-          value={bien}
-          onValueChange={(v) => pushParams({ bien: v === "all" ? null : v })}
-        >
-          <SelectTrigger className="w-full sm:w-56">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tous les biens</SelectItem>
-            {biens.map((b) => (
-              <SelectItem key={b.id} value={b.id}>
-                {b.nom} — {b.ville}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
+            <FilterField id="f-type" label="Type de clé">
+              <Select
+                value={type}
+                onValueChange={(v) =>
+                  pushParams({ type: v === "all" ? null : v })
+                }
+              >
+                <SelectTrigger id="f-type" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TYPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterField>
 
-      <Select
-        value={personneType}
-        onValueChange={(v) =>
-          pushParams({ personne_type: v === "all" ? null : v })
-        }
-      >
-        <SelectTrigger className="w-full sm:w-44">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {PERSONNE_TYPE_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+            {biens.length > 0 && (
+              <FilterField id="f-bien" label="Bien">
+                <Select
+                  value={bien}
+                  onValueChange={(v) =>
+                    pushParams({ bien: v === "all" ? null : v })
+                  }
+                >
+                  <SelectTrigger id="f-bien" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Tous les biens</SelectItem>
+                    {biens.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.nom} — {b.ville}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FilterField>
+            )}
 
-      {hasFilters && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            setQ("");
-            startTransition(() => router.push(pathname));
-          }}
-        >
+            <FilterField id="f-pt" label="Type de détenteur">
+              <Select
+                value={personneType}
+                onValueChange={(v) =>
+                  pushParams({ personne_type: v === "all" ? null : v })
+                }
+              >
+                <SelectTrigger id="f-pt" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PERSONNE_TYPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FilterField>
+          </div>
+
+          <SheetFooter className="border-t">
+            <Button
+              variant="outline"
+              onClick={resetSheetFilters}
+              disabled={activeFilters === 0}
+            >
+              <X aria-hidden />
+              Réinitialiser
+            </Button>
+            <SheetClose
+              render={<Button>Voir les résultats</Button>}
+            />
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {((params.get("q") ?? "") !== "" || activeFilters > 0) && (
+        <Button variant="ghost" size="sm" onClick={resetAll} className="h-10">
           <X aria-hidden />
-          Réinitialiser
+          <span className="hidden sm:inline">Tout effacer</span>
         </Button>
       )}
+    </div>
+  );
+}
+
+function FilterField({
+  id,
+  label,
+  children,
+}: {
+  id: string;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <Label htmlFor={id} className="mb-1.5 inline-block text-xs font-medium">
+        {label}
+      </Label>
+      {children}
     </div>
   );
 }

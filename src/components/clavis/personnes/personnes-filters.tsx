@@ -1,11 +1,13 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -13,6 +15,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import type { Database } from "@/types/database";
 
 type PersonneType = Database["public"]["Enums"]["personne_type"];
@@ -59,50 +71,96 @@ export function PersonnesFilters() {
     });
   }
 
-  const hasFilters = (params.get("q") ?? "") !== "" || type !== "all";
+  const activeFilters = type !== "all" ? 1 : 0;
+
+  function resetAll() {
+    setQ("");
+    startTransition(() => router.push(pathname));
+  }
 
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <div className="relative flex-1 sm:max-w-sm">
+    <div className="flex items-center gap-2">
+      <div className="relative flex-1 sm:max-w-md">
         <Search
           aria-hidden
-          className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+          className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2"
         />
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Rechercher par nom, prénom, téléphone…"
-          className="pl-8"
+          className="h-10 pl-9"
         />
       </div>
 
-      <Select
-        value={type}
-        onValueChange={(v) => pushParams({ type: v === "all" ? null : v })}
-      >
-        <SelectTrigger className="w-full sm:w-52">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {TYPE_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <Sheet>
+        <SheetTrigger
+          render={
+            <Button variant="outline" className="h-10 gap-2">
+              <SlidersHorizontal aria-hidden className="size-4" />
+              <span className="hidden sm:inline">Filtres</span>
+              {activeFilters > 0 && (
+                <Badge variant="secondary" className="ml-0.5 h-5 px-1.5">
+                  {activeFilters}
+                </Badge>
+              )}
+            </Button>
+          }
+        />
+        <SheetContent className="w-full sm:max-w-md">
+          <SheetHeader className="border-b">
+            <SheetTitle>Filtres</SheetTitle>
+            <SheetDescription>
+              Affine la liste des personnes par type de profil.
+            </SheetDescription>
+          </SheetHeader>
 
-      {hasFilters && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            setQ("");
-            startTransition(() => router.push(pathname));
-          }}
-        >
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
+            <div>
+              <Label
+                htmlFor="f-type"
+                className="mb-1.5 inline-block text-xs font-medium"
+              >
+                Type de personne
+              </Label>
+              <Select
+                value={type}
+                onValueChange={(v) =>
+                  pushParams({ type: v === "all" ? null : v })
+                }
+              >
+                <SelectTrigger id="f-type" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TYPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <SheetFooter className="border-t">
+            <Button
+              variant="outline"
+              onClick={() => pushParams({ type: null })}
+              disabled={activeFilters === 0}
+            >
+              <X aria-hidden />
+              Réinitialiser
+            </Button>
+            <SheetClose render={<Button>Voir les résultats</Button>} />
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      {((params.get("q") ?? "") !== "" || activeFilters > 0) && (
+        <Button variant="ghost" size="sm" onClick={resetAll} className="h-10">
           <X aria-hidden />
-          Réinitialiser
+          <span className="hidden sm:inline">Tout effacer</span>
         </Button>
       )}
     </div>

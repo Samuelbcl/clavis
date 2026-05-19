@@ -252,7 +252,7 @@ export default async function HistoriquePage({
                         {cle ? (
                           <Link
                             href={`/cles/${cle.id}`}
-                            className="font-mono text-sm hover:underline"
+                            className="text-primary font-mono text-sm underline-offset-4 transition-colors hover:underline"
                           >
                             {cle.code}
                           </Link>
