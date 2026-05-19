@@ -1,14 +1,18 @@
 import {
   Archive,
   ArchiveRestore,
+  HandCoins,
   MoreHorizontal,
   Phone,
   Plus,
+  Undo2,
 } from "lucide-react";
 
 import { ArchiveCleDialog } from "@/components/clavis/cles/archive-cle-dialog";
 import { CleFormDialog } from "@/components/clavis/cles/cle-form-dialog";
 import { ClesFilters } from "@/components/clavis/cles/cles-filters";
+import { RecupererCleDialog } from "@/components/clavis/cles/recuperer-cle-dialog";
+import { RemettreCleDialog } from "@/components/clavis/cles/remettre-cle-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -124,6 +128,13 @@ export default async function ClesPage({
     .order("nom");
   const biens = biensRaw ?? [];
 
+  const { data: personnesRaw } = await supabase
+    .from("personnes")
+    .select("id, nom, prenom, type")
+    .order("nom")
+    .order("prenom");
+  const personnes = personnesRaw ?? [];
+
   let query = supabase
     .from("cles")
     .select(
@@ -229,9 +240,7 @@ export default async function ClesPage({
                 <TableHead>Type</TableHead>
                 <TableHead>Statut</TableHead>
                 <TableHead>Détenteur actuel</TableHead>
-                {isAdmin && (
-                  <TableHead className="w-12 text-right" aria-label="Actions" />
-                )}
+                <TableHead className="w-12 text-right" aria-label="Actions" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -276,64 +285,112 @@ export default async function ClesPage({
                       <span className="text-muted-foreground text-sm">—</span>
                     )}
                   </TableCell>
-                  {isAdmin && (
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Actions pour ${c.code}`}
-                            />
-                          }
-                        >
-                          <MoreHorizontal aria-hidden />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <CleFormDialog
-                            mode="edit"
-                            cle={c}
-                            biens={biens}
-                            trigger={
-                              <DropdownMenuItem closeOnClick={false}>
-                                Éditer
-                              </DropdownMenuItem>
+                  <TableCell className="text-right">
+                    {(() => {
+                      const canRemettre = c.statut === "disponible";
+                      const canRecuperer = c.statut === "remise";
+                      const hasMouvementAction = canRemettre || canRecuperer;
+                      const showMenu = isAdmin || hasMouvementAction;
+                      const bienLabel = c.bien
+                        ? `${c.bien.nom} — ${c.bien.ville}`
+                        : "—";
+                      const detenteurLabel = c.personne_actuelle
+                        ? `${c.personne_actuelle.prenom} ${c.personne_actuelle.nom}`
+                        : null;
+
+                      if (!showMenu) return null;
+
+                      return (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Actions pour ${c.code}`}
+                              />
                             }
-                          />
-                          <DropdownMenuSeparator />
-                          {c.statut === "archivee" ? (
-                            <ArchiveCleDialog
-                              cleId={c.id}
-                              cleCode={c.code}
-                              archive={false}
-                              trigger={
-                                <DropdownMenuItem closeOnClick={false}>
-                                  <ArchiveRestore aria-hidden />
-                                  Réactiver
-                                </DropdownMenuItem>
-                              }
-                            />
-                          ) : (
-                            <ArchiveCleDialog
-                              cleId={c.id}
-                              cleCode={c.code}
-                              archive={true}
-                              trigger={
-                                <DropdownMenuItem
-                                  variant="destructive"
-                                  closeOnClick={false}
-                                >
-                                  <Archive aria-hidden />
-                                  Archiver
-                                </DropdownMenuItem>
-                              }
-                            />
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  )}
+                          >
+                            <MoreHorizontal aria-hidden />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {canRemettre && (
+                              <RemettreCleDialog
+                                cleId={c.id}
+                                cleCode={c.code}
+                                bienLabel={bienLabel}
+                                personnes={personnes}
+                                trigger={
+                                  <DropdownMenuItem closeOnClick={false}>
+                                    <HandCoins aria-hidden />
+                                    Remettre
+                                  </DropdownMenuItem>
+                                }
+                              />
+                            )}
+                            {canRecuperer && (
+                              <RecupererCleDialog
+                                cleId={c.id}
+                                cleCode={c.code}
+                                detenteurLabel={detenteurLabel}
+                                trigger={
+                                  <DropdownMenuItem closeOnClick={false}>
+                                    <Undo2 aria-hidden />
+                                    Récupérer
+                                  </DropdownMenuItem>
+                                }
+                              />
+                            )}
+                            {isAdmin && hasMouvementAction && (
+                              <DropdownMenuSeparator />
+                            )}
+                            {isAdmin && (
+                              <CleFormDialog
+                                mode="edit"
+                                cle={c}
+                                biens={biens}
+                                trigger={
+                                  <DropdownMenuItem closeOnClick={false}>
+                                    Éditer
+                                  </DropdownMenuItem>
+                                }
+                              />
+                            )}
+                            {isAdmin && <DropdownMenuSeparator />}
+                            {isAdmin && c.statut === "archivee" && (
+                              <ArchiveCleDialog
+                                cleId={c.id}
+                                cleCode={c.code}
+                                archive={false}
+                                trigger={
+                                  <DropdownMenuItem closeOnClick={false}>
+                                    <ArchiveRestore aria-hidden />
+                                    Réactiver
+                                  </DropdownMenuItem>
+                                }
+                              />
+                            )}
+                            {isAdmin && c.statut !== "archivee" && (
+                              <ArchiveCleDialog
+                                cleId={c.id}
+                                cleCode={c.code}
+                                archive={true}
+                                trigger={
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    closeOnClick={false}
+                                  >
+                                    <Archive aria-hidden />
+                                    Archiver
+                                  </DropdownMenuItem>
+                                }
+                              />
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      );
+                    })()}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

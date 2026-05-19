@@ -179,6 +179,101 @@ export async function updateCle(
   }
 }
 
+// Remet une clé à une personne : INSERT mouvement type='remise'.
+// Le trigger DB sync_cle_on_mouvement met à jour cles.statut + personne_actuelle_id.
+export async function remettreCle(input: {
+  cleId: string;
+  personneId: string;
+  notes?: string;
+}): Promise<ActionResult<{ mouvementId: string }>> {
+  try {
+    if (!input.cleId || !input.personneId) {
+      return { ok: false, message: "Clé et personne requises." };
+    }
+
+    const user = await getCurrentUser();
+    const supabase = await createClient();
+
+    const { data, error } = await supabase
+      .from("mouvements")
+      .insert({
+        cle_id: input.cleId,
+        personne_id: input.personneId,
+        type: "remise",
+        operateur_id: user.id,
+        notes: input.notes?.trim() || null,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error("[cles/remettre] supabase error:", error);
+      return { ok: false, message: error.message };
+    }
+
+    revalidatePath("/cles");
+    revalidatePath("/historique");
+    return {
+      ok: true,
+      data: { mouvementId: data.id },
+      message: "Clé remise.",
+    };
+  } catch (err) {
+    return unexpectedError("remettre", err);
+  }
+}
+
+// Récupère une clé : INSERT mouvement type='retour'.
+// On préserve personne_id = détenteur actuel (avant que le trigger ne le clear)
+// pour garder dans l'historique qui a rendu la clé.
+export async function recupererCle(input: {
+  cleId: string;
+  notes?: string;
+}): Promise<ActionResult<{ mouvementId: string }>> {
+  try {
+    if (!input.cleId) {
+      return { ok: false, message: "Clé requise." };
+    }
+
+    const user = await getCurrentUser();
+    const supabase = await createClient();
+
+    // Capture le détenteur actuel avant que le trigger ne le clear.
+    const { data: cle } = await supabase
+      .from("cles")
+      .select("personne_actuelle_id")
+      .eq("id", input.cleId)
+      .single();
+
+    const { data, error } = await supabase
+      .from("mouvements")
+      .insert({
+        cle_id: input.cleId,
+        personne_id: cle?.personne_actuelle_id ?? null,
+        type: "retour",
+        operateur_id: user.id,
+        notes: input.notes?.trim() || null,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      console.error("[cles/recuperer] supabase error:", error);
+      return { ok: false, message: error.message };
+    }
+
+    revalidatePath("/cles");
+    revalidatePath("/historique");
+    return {
+      ok: true,
+      data: { mouvementId: data.id },
+      message: "Clé récupérée.",
+    };
+  } catch (err) {
+    return unexpectedError("recuperer", err);
+  }
+}
+
 // Toggle archivage : 'archivee' <-> 'disponible'.
 // On ne supprime jamais une clé (les mouvements doivent rester traçables).
 export async function setCleArchive(
