@@ -128,14 +128,49 @@ export function BienFormDialog({
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-3">
-          <Field id="nom" label="Nom" error={errors.nom}>
+          <Field id="type" label="Type" error={errors.type}>
+            <Select
+              value={values.type}
+              onValueChange={(v) => set("type", v as BienType)}
+              disabled={pending}
+            >
+              <SelectTrigger id="type" className="w-full">
+                <SelectValue>
+                  {(val: string) =>
+                    TYPE_LABELS[val as BienType] ?? val
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(TYPE_LABELS) as BienType[]).map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {TYPE_LABELS[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <Field
+            id="nom"
+            label={
+              values.type === "autre"
+                ? "Précisez le type"
+                : "Nom (identifiant interne)"
+            }
+            error={errors.nom}
+          >
             <Input
               id="nom"
               required
               maxLength={200}
               value={values.nom}
               onChange={(e) => set("nom", e.target.value)}
-              placeholder="Appart Rue de la Paix 12 – étage 2"
+              placeholder={
+                values.type === "autre"
+                  ? "Cabane de jardin, terrain, bureau partagé…"
+                  : "App 4B, Étage 2, La Maison du Bois…"
+              }
               disabled={pending}
             />
           </Field>
@@ -151,7 +186,7 @@ export function BienFormDialog({
               maxLength={500}
               value={values.adresse_complete}
               onChange={(e) => set("adresse_complete", e.target.value)}
-              placeholder="Rue de la Paix 12, étage 2"
+              placeholder="Rue de la Paix 12"
               disabled={pending}
             />
           </Field>
@@ -192,29 +227,6 @@ export function BienFormDialog({
               />
             </Field>
           </div>
-
-          <Field id="type" label="Type" error={errors.type}>
-            <Select
-              value={values.type}
-              onValueChange={(v) => set("type", v as BienType)}
-              disabled={pending}
-            >
-              <SelectTrigger id="type" className="w-full">
-                <SelectValue>
-                  {(val: string) =>
-                    TYPE_LABELS[val as BienType] ?? val
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(TYPE_LABELS) as BienType[]).map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {TYPE_LABELS[t]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
 
           <Field id="notes" label="Notes (optionnel)" error={errors.notes}>
             <Textarea
