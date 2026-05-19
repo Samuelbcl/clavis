@@ -174,20 +174,7 @@ export default async function ClesPage({
   const user = await getCurrentUser();
   const supabase = await createClient();
 
-  const { data: biensRaw } = await supabase
-    .from("biens")
-    .select("id, nom, ville")
-    .order("nom");
-  const biens = biensRaw ?? [];
-
-  const { data: personnesRaw } = await supabase
-    .from("personnes")
-    .select("id, nom, prenom, type")
-    .order("nom")
-    .order("prenom");
-  const personnes = personnesRaw ?? [];
-
-  let query = supabase
+  let clesQuery = supabase
     .from("cles_view")
     .select(
       `id, code, type, statut, description, bien_id, personne_actuelle_id, created_at, updated_at,
@@ -199,25 +186,26 @@ export default async function ClesPage({
 
   // Tri secondaire stable : par code asc (sauf si on trie déjà par code).
   if (sortColumn !== "code") {
-    query = query.order("code", { ascending: true });
+    clesQuery = clesQuery.order("code", { ascending: true });
   }
 
   if (statutFilter === "actives") {
-    query = query.neq("statut", "archivee");
+    clesQuery = clesQuery.neq("statut", "archivee");
   } else if (statutFilter !== "all") {
-    query = query.eq("statut", statutFilter);
+    clesQuery = clesQuery.eq("statut", statutFilter);
   }
 
-  if (typeFilter) query = query.eq("type", typeFilter);
-  if (bienFilter) query = query.eq("bien_id", bienFilter);
-  if (personneTypeFilter) query = query.eq("personne_type", personneTypeFilter);
+  if (typeFilter) clesQuery = clesQuery.eq("type", typeFilter);
+  if (bienFilter) clesQuery = clesQuery.eq("bien_id", bienFilter);
+  if (personneTypeFilter)
+    clesQuery = clesQuery.eq("personne_type", personneTypeFilter);
 
   if (q) {
     const safe = sanitizeForIlike(q);
     if (safe.length > 0) {
       const pattern = `%${safe}%`;
       // Recherche fulltext cross-table : on tape sur les colonnes plates de la vue.
-      query = query.or(
+      clesQuery = clesQuery.or(
         [
           `code.ilike.${pattern}`,
           `description.ilike.${pattern}`,
@@ -234,21 +222,28 @@ export default async function ClesPage({
     }
   }
 
-  let cles: Awaited<typeof query>["data"] = null;
-  let error: Awaited<typeof query>["error"] = null;
-  try {
-    const res = await query;
-    cles = res.data;
-    error = res.error;
-  } catch (err) {
-    console.error("[cles/page] query threw:", err);
-    error = {
-      code: "unknown",
-      message: err instanceof Error ? err.message : String(err),
-      details: "",
-      hint: "",
-      name: "PostgrestError",
-    } as never;
+  // 3 requêtes en parallèle (biens et personnes alimentent les selects des
+  // dialogs ; cles est la liste principale).
+  const [biensRes, personnesRes, clesRes] = await Promise.all([
+    supabase.from("biens").select("id, nom, ville").order("nom"),
+    supabase
+      .from("personnes")
+      .select("id, nom, prenom, type")
+      .order("nom")
+      .order("prenom"),
+    clesQuery,
+  ]);
+
+  const biens = biensRes.data ?? [];
+  const personnes = personnesRes.data ?? [];
+
+  let cles: typeof clesRes.data = null;
+  let error: typeof clesRes.error = null;
+  if (clesRes.error) {
+    console.error("[cles/page] query error:", clesRes.error);
+    error = clesRes.error;
+  } else {
+    cles = clesRes.data;
   }
 
   const isAdmin = user.role === "admin";

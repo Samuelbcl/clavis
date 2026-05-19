@@ -22,6 +22,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 const NAV_ITEMS = [
@@ -43,6 +44,10 @@ export function AppSidebar({
   user: { email: string; role: "admin" | "operateur" };
 }) {
   const pathname = usePathname();
+  const { setOpenMobile } = useSidebar();
+
+  // Ferme le drawer mobile à chaque navigation. No-op sur desktop.
+  const closeMobile = () => setOpenMobile(false);
 
   return (
     <Sidebar collapsible="icon">
@@ -62,7 +67,7 @@ export function AppSidebar({
               {NAV_ITEMS.map((item) => (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
-                    render={<Link href={item.href} />}
+                    render={<Link href={item.href} onClick={closeMobile} />}
                     isActive={isActive(pathname, item.href)}
                     tooltip={item.label}
                   >

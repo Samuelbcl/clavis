@@ -109,16 +109,36 @@ export default async function CleDetailPage({
   const user = await getCurrentUser();
   const supabase = await createClient();
 
-  const { data: cle, error: cleError } = await supabase
-    .from("cles_view")
-    .select(
-      `id, code, type, statut, description, bien_id, personne_actuelle_id, created_at, updated_at,
-       bien_nom, bien_adresse_complete, bien_code_postal, bien_ville, bien_type,
-       personne_nom, personne_prenom, personne_telephone, personne_email, personne_type`,
-    )
-    .eq("id", id)
-    .single();
+  // 4 requêtes en parallèle : ~4x plus rapide qu'en série. Le mouvements query
+  // utilise l'id de l'URL (pas besoin d'attendre cleRes pour avoir cleId).
+  const [cleRes, biensRes, personnesRes, mouvementsRes] = await Promise.all([
+    supabase
+      .from("cles_view")
+      .select(
+        `id, code, type, statut, description, bien_id, personne_actuelle_id, created_at, updated_at,
+         bien_nom, bien_adresse_complete, bien_code_postal, bien_ville, bien_type,
+         personne_nom, personne_prenom, personne_telephone, personne_email, personne_type`,
+      )
+      .eq("id", id)
+      .single(),
+    supabase.from("biens").select("id, nom, ville").order("nom"),
+    supabase
+      .from("personnes")
+      .select("id, nom, prenom, type")
+      .order("nom")
+      .order("prenom"),
+    supabase
+      .from("mouvements")
+      .select(
+        `id, type, date_mouvement, notes, confirmee_par_receveur, date_confirmation,
+         personne:personnes (id, nom, prenom, telephone, type),
+         operateur:users!mouvements_operateur_id_fkey (id, nom, prenom)`,
+      )
+      .eq("cle_id", id)
+      .order("date_mouvement", { ascending: false }),
+  ]);
 
+  const { data: cle, error: cleError } = cleRes;
   if (cleError || !cle || !cle.id || !cle.code) {
     notFound();
   }
@@ -128,33 +148,9 @@ export default async function CleDetailPage({
   const cleType = cle.type!;
   const cleStatut = cle.statut!;
   const cleBienId = cle.bien_id!;
-
-  // Liste des biens pour le dialog d'édition
-  const { data: biensRaw } = await supabase
-    .from("biens")
-    .select("id, nom, ville")
-    .order("nom");
-  const biens = biensRaw ?? [];
-
-  // Personnes pour le dialog de remise
-  const { data: personnesRaw } = await supabase
-    .from("personnes")
-    .select("id, nom, prenom, type")
-    .order("nom")
-    .order("prenom");
-  const personnes = personnesRaw ?? [];
-
-  // Historique des mouvements
-  const { data: mouvementsRaw } = await supabase
-    .from("mouvements")
-    .select(
-      `id, type, date_mouvement, notes, confirmee_par_receveur, date_confirmation,
-       personne:personnes (id, nom, prenom, telephone, type),
-       operateur:users!mouvements_operateur_id_fkey (id, nom, prenom)`,
-    )
-    .eq("cle_id", cleId)
-    .order("date_mouvement", { ascending: false });
-  const mouvements = mouvementsRaw ?? [];
+  const biens = biensRes.data ?? [];
+  const personnes = personnesRes.data ?? [];
+  const mouvements = mouvementsRes.data ?? [];
 
   const canRemettre = cleStatut === "disponible";
   const canRecuperer = cleStatut === "remise";
