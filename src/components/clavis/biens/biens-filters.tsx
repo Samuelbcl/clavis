@@ -47,6 +47,9 @@ export function BiensFilters() {
 
   const [q, setQ] = useState(params.get("q") ?? "");
   const type = params.get("type") ?? "all";
+  const [typePrecise, setTypePrecise] = useState(
+    params.get("type_precise") ?? "",
+  );
 
   useEffect(() => {
     const current = params.get("q") ?? "";
@@ -57,6 +60,16 @@ export function BiensFilters() {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
+
+  useEffect(() => {
+    const current = params.get("type_precise") ?? "";
+    if (typePrecise === current) return;
+    const timer = setTimeout(() => {
+      pushParams({ type_precise: typePrecise || null });
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typePrecise]);
 
   function pushParams(updates: Record<string, string | null>) {
     const next = new URLSearchParams(params.toString());
@@ -70,10 +83,18 @@ export function BiensFilters() {
     });
   }
 
-  const activeFilters = type !== "all" ? 1 : 0;
+  const activeFilters =
+    (type !== "all" ? 1 : 0) +
+    (type === "autre" && typePrecise.length > 0 ? 1 : 0);
+
+  function resetFilters() {
+    setTypePrecise("");
+    pushParams({ type: null, type_precise: null });
+  }
 
   function resetAll() {
     setQ("");
+    setTypePrecise("");
     startTransition(() => router.push(pathname));
   }
 
@@ -124,9 +145,16 @@ export function BiensFilters() {
               </Label>
               <Select
                 value={type}
-                onValueChange={(v) =>
-                  pushParams({ type: v === "all" ? null : v })
-                }
+                onValueChange={(v) => {
+                  const updates: Record<string, string | null> = {
+                    type: v === "all" ? null : v,
+                  };
+                  if (v !== "autre") {
+                    setTypePrecise("");
+                    updates.type_precise = null;
+                  }
+                  pushParams(updates);
+                }}
               >
                 <SelectTrigger id="f-type" className="w-full">
                   <SelectValue />
@@ -140,12 +168,32 @@ export function BiensFilters() {
                 </SelectContent>
               </Select>
             </div>
+
+            {type === "autre" && (
+              <div>
+                <Label
+                  htmlFor="f-type-precise"
+                  className="mb-1.5 inline-block text-xs font-medium"
+                >
+                  Précisez (recherche dans Nom et Notes)
+                </Label>
+                <Input
+                  id="f-type-precise"
+                  value={typePrecise}
+                  onChange={(e) => setTypePrecise(e.target.value)}
+                  placeholder="Cabane, terrain, bureau partagé…"
+                />
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Affine la liste « Autre » par mot-clé sur le nom ou les notes.
+                </p>
+              </div>
+            )}
           </div>
 
           <SheetFooter className="border-t">
             <Button
               variant="outline"
-              onClick={() => pushParams({ type: null })}
+              onClick={resetFilters}
               disabled={activeFilters === 0}
             >
               <X aria-hidden />

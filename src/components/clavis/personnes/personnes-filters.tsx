@@ -48,6 +48,9 @@ export function PersonnesFilters() {
 
   const [q, setQ] = useState(params.get("q") ?? "");
   const type = params.get("type") ?? "all";
+  const [typePrecise, setTypePrecise] = useState(
+    params.get("type_precise") ?? "",
+  );
 
   useEffect(() => {
     const current = params.get("q") ?? "";
@@ -58,6 +61,17 @@ export function PersonnesFilters() {
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
+
+  // Debounce type_precise comme la search.
+  useEffect(() => {
+    const current = params.get("type_precise") ?? "";
+    if (typePrecise === current) return;
+    const timer = setTimeout(() => {
+      pushParams({ type_precise: typePrecise || null });
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typePrecise]);
 
   function pushParams(updates: Record<string, string | null>) {
     const next = new URLSearchParams(params.toString());
@@ -71,11 +85,19 @@ export function PersonnesFilters() {
     });
   }
 
-  const activeFilters = type !== "all" ? 1 : 0;
+  const activeFilters =
+    (type !== "all" ? 1 : 0) +
+    (type === "autre" && typePrecise.length > 0 ? 1 : 0);
 
   function resetAll() {
     setQ("");
+    setTypePrecise("");
     startTransition(() => router.push(pathname));
+  }
+
+  function resetFilters() {
+    setTypePrecise("");
+    pushParams({ type: null, type_precise: null });
   }
 
   return (
@@ -125,9 +147,16 @@ export function PersonnesFilters() {
               </Label>
               <Select
                 value={type}
-                onValueChange={(v) =>
-                  pushParams({ type: v === "all" ? null : v })
-                }
+                onValueChange={(v) => {
+                  const updates: Record<string, string | null> = {
+                    type: v === "all" ? null : v,
+                  };
+                  if (v !== "autre") {
+                    setTypePrecise("");
+                    updates.type_precise = null;
+                  }
+                  pushParams(updates);
+                }}
               >
                 <SelectTrigger id="f-type" className="w-full">
                   <SelectValue />
@@ -141,12 +170,32 @@ export function PersonnesFilters() {
                 </SelectContent>
               </Select>
             </div>
+
+            {type === "autre" && (
+              <div>
+                <Label
+                  htmlFor="f-type-precise"
+                  className="mb-1.5 inline-block text-xs font-medium"
+                >
+                  Précisez (recherche dans le champ Métier)
+                </Label>
+                <Input
+                  id="f-type-precise"
+                  value={typePrecise}
+                  onChange={(e) => setTypePrecise(e.target.value)}
+                  placeholder="Huissier, ami, expert-comptable…"
+                />
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Affine la liste « Autre » en cherchant un mot dans le métier.
+                </p>
+              </div>
+            )}
           </div>
 
           <SheetFooter className="border-t">
             <Button
               variant="outline"
-              onClick={() => pushParams({ type: null })}
+              onClick={resetFilters}
               disabled={activeFilters === 0}
             >
               <X aria-hidden />

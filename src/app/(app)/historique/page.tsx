@@ -81,10 +81,13 @@ function formatDateTime(iso: string): string {
   });
 }
 
+const PRESET_DAYS = new Set(["1", "2", "7", "15", "30"]);
+
 export default async function HistoriquePage({
   searchParams,
 }: {
   searchParams: Promise<{
+    periode?: string;
     from?: string;
     to?: string;
     type?: string;
@@ -93,16 +96,6 @@ export default async function HistoriquePage({
 }) {
   const params = await searchParams;
 
-  // Période par défaut : 30 derniers jours.
-  const now = new Date();
-  const defaultFrom = new Date(
-    now.getTime() - DEFAULT_RANGE_DAYS * 24 * 60 * 60 * 1000,
-  );
-  const defaultFromIso = toIsoDate(defaultFrom);
-  const defaultToIso = toIsoDate(now);
-
-  const fromIso = params.from ?? defaultFromIso;
-  const toIso = params.to ?? defaultToIso;
   const typeFilter =
     params.type && VALID_TYPES.has(params.type as MouvementType)
       ? (params.type as MouvementType)
@@ -111,11 +104,28 @@ export default async function HistoriquePage({
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
-  // Bornes UTC : start of from (00:00) à end of to (23:59:59.999).
-  // Approximation TZ-naive : on traite les chaînes comme UTC. L'écart de 1-2h
-  // par rapport à BE est acceptable pour un audit log (pas du temps réel).
-  const fromTs = new Date(`${fromIso}T00:00:00Z`).toISOString();
-  const toTs = new Date(`${toIso}T23:59:59.999Z`).toISOString();
+  // 3 cas de période :
+  //   - from/to explicites → mode custom (date range libre)
+  //   - periode = "all" → pas de bornes (tout l'historique)
+  //   - sinon → preset (1/2/7/15/30 jours) ou default 30j
+  let fromTs: string | null = null;
+  let toTs: string | null = null;
+  const now = new Date();
+
+  if (params.from || params.to) {
+    const fromIso = params.from ?? toIsoDate(new Date(now.getTime() - DEFAULT_RANGE_DAYS * 86400000));
+    const toIso = params.to ?? toIsoDate(now);
+    fromTs = new Date(`${fromIso}T00:00:00Z`).toISOString();
+    toTs = new Date(`${toIso}T23:59:59.999Z`).toISOString();
+  } else if (params.periode === "all") {
+    // Aucun filtre temporel.
+  } else {
+    const days = PRESET_DAYS.has(params.periode ?? "")
+      ? Number.parseInt(params.periode!, 10)
+      : DEFAULT_RANGE_DAYS;
+    fromTs = new Date(now.getTime() - days * 86400000).toISOString();
+    toTs = now.toISOString();
+  }
 
   const supabase = await createClient();
 
@@ -130,11 +140,11 @@ export default async function HistoriquePage({
        operateur:users!mouvements_operateur_id_fkey (id, nom, prenom)`,
       { count: "exact" },
     )
-    .gte("date_mouvement", fromTs)
-    .lte("date_mouvement", toTs)
     .order("date_mouvement", { ascending: false })
     .range(offset, offset + PAGE_SIZE - 1);
 
+  if (fromTs) query = query.gte("date_mouvement", fromTs);
+  if (toTs) query = query.lte("date_mouvement", toTs);
   if (typeFilter) {
     query = query.eq("type", typeFilter);
   }
@@ -164,6 +174,7 @@ export default async function HistoriquePage({
 
   function pageHref(targetPage: number): string {
     const sp = new URLSearchParams();
+    if (params.periode) sp.set("periode", params.periode);
     if (params.from) sp.set("from", params.from);
     if (params.to) sp.set("to", params.to);
     if (params.type) sp.set("type", params.type);
@@ -181,10 +192,7 @@ export default async function HistoriquePage({
         </p>
       </header>
 
-      <HistoriqueFilters
-        defaultFrom={defaultFromIso}
-        defaultTo={defaultToIso}
-      />
+      <HistoriqueFilters />
 
       {error && (
         <Card>
@@ -209,7 +217,7 @@ export default async function HistoriquePage({
 
       {!error && mouvements && mouvements.length > 0 && (
         <>
-          <div className="overflow-hidden rounded-lg border">
+          <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>

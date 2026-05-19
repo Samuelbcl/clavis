@@ -60,7 +60,7 @@ function sanitizeForIlike(input: string): string {
 export default async function BiensPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; type_precise?: string }>;
 }) {
   const params = await searchParams;
   const q = params.q?.trim() ?? "";
@@ -69,6 +69,7 @@ export default async function BiensPage({
     typeParam && VALID_TYPES.has(typeParam as BienType)
       ? (typeParam as BienType)
       : null;
+  const typePrecise = params.type_precise?.trim() ?? "";
 
   const user = await getCurrentUser();
   const supabase = await createClient();
@@ -85,13 +86,27 @@ export default async function BiensPage({
     if (safe.length > 0) {
       const pattern = `%${safe}%`;
       query = query.or(
-        `nom.ilike.${pattern},adresse_complete.ilike.${pattern},ville.ilike.${pattern}`,
+        [
+          `nom.ilike.${pattern}`,
+          `adresse_complete.ilike.${pattern}`,
+          `ville.ilike.${pattern}`,
+          `notes.ilike.${pattern}`,
+        ].join(","),
       );
     }
   }
 
   if (typeFilter) {
     query = query.eq("type", typeFilter);
+  }
+
+  // Filtre "autre" + précision : affine sur nom + notes.
+  if (typeFilter === "autre" && typePrecise) {
+    const safe = sanitizeForIlike(typePrecise);
+    if (safe.length > 0) {
+      const pattern = `%${safe}%`;
+      query = query.or(`nom.ilike.${pattern},notes.ilike.${pattern}`);
+    }
   }
 
   let biens: Awaited<typeof query>["data"] = null;
@@ -113,7 +128,7 @@ export default async function BiensPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex items-start justify-between gap-4">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Biens</h1>
           <p className="text-muted-foreground text-sm">
@@ -123,7 +138,7 @@ export default async function BiensPage({
         <BienFormDialog
           mode="create"
           trigger={
-            <Button>
+            <Button className="self-start sm:self-auto">
               <Plus aria-hidden />
               Nouveau bien
             </Button>
@@ -157,7 +172,7 @@ export default async function BiensPage({
       )}
 
       {!error && biens && biens.length > 0 && (
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>

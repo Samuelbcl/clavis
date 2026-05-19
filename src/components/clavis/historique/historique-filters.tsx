@@ -25,6 +25,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
 import type { Database } from "@/types/database";
 
 type MouvementType = Database["public"]["Enums"]["mouvement_type"];
@@ -37,20 +38,44 @@ const TYPE_OPTIONS: { value: MouvementType | "all"; label: string }[] = [
   { value: "refaite", label: "Refaites" },
 ];
 
-export function HistoriqueFilters({
-  defaultFrom,
-  defaultTo,
-}: {
-  defaultFrom: string;
-  defaultTo: string;
-}) {
+// Presets de période. La valeur est le nombre de jours OU "all" pour tout.
+// "30" est le default historique implicite (pas de param URL).
+const PERIODE_PRESETS = [
+  { value: "1", label: "24 h" },
+  { value: "2", label: "48 h" },
+  { value: "7", label: "7 j" },
+  { value: "15", label: "15 j" },
+  { value: "30", label: "30 j" },
+  { value: "all", label: "Tout" },
+] as const;
+
+type PresetValue = (typeof PERIODE_PRESETS)[number]["value"];
+
+function getCurrentPreset(params: URLSearchParams): PresetValue | "custom" {
+  const periode = params.get("periode");
+  // Si l'utilisateur a touché Du/Au manuellement, on bascule en "custom".
+  if (params.get("from") || params.get("to")) return "custom";
+  if (
+    periode &&
+    PERIODE_PRESETS.some((p) => p.value === periode)
+  ) {
+    return periode as PresetValue;
+  }
+  return "30"; // default
+}
+
+export function HistoriqueFilters() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const [, startTransition] = useTransition();
 
-  const from = params.get("from") ?? defaultFrom;
-  const to = params.get("to") ?? defaultTo;
+  const currentPreset = getCurrentPreset(
+    new URLSearchParams(params.toString()),
+  );
+  const isCustom = currentPreset === "custom";
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
   const type = params.get("type") ?? "all";
 
   function pushParams(updates: Record<string, string | null>) {
@@ -66,20 +91,43 @@ export function HistoriqueFilters({
     });
   }
 
-  const hasCustomDate =
-    params.get("from") !== null || params.get("to") !== null;
-  const activeFilters = [hasCustomDate, type !== "all"].filter(Boolean).length;
+  function selectPreset(value: PresetValue) {
+    // Reset Du/Au quand on choisit un preset.
+    pushParams({
+      periode: value === "30" ? null : value,
+      from: null,
+      to: null,
+    });
+  }
+
+  function toggleCustom() {
+    // Bascule vers mode dates libres : on enleve le preset + on init from/to.
+    const today = new Date();
+    const lastMonth = new Date(today);
+    lastMonth.setDate(lastMonth.getDate() - 30);
+    pushParams({
+      periode: null,
+      from: lastMonth.toISOString().slice(0, 10),
+      to: today.toISOString().slice(0, 10),
+    });
+  }
+
+  const periodLabel =
+    currentPreset === "custom"
+      ? `${formatHumanDate(from)} → ${formatHumanDate(to)}`
+      : PERIODE_PRESETS.find((p) => p.value === currentPreset)?.label ?? "30 j";
+
+  const activeFilters =
+    (currentPreset !== "30" ? 1 : 0) + (type !== "all" ? 1 : 0);
+
+  const typeLabel =
+    type === "all"
+      ? null
+      : TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type;
 
   function resetAll() {
     startTransition(() => router.push(pathname));
   }
-
-  // Résumé compact des filtres actifs affiché à côté du bouton.
-  const dateLabel =
-    !hasCustomDate
-      ? "30 derniers jours"
-      : `${formatHumanDate(from)} → ${formatHumanDate(to)}`;
-  const typeLabel = type === "all" ? null : findTypeLabel(type);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -105,41 +153,81 @@ export function HistoriqueFilters({
             </SheetDescription>
           </SheetHeader>
 
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label
-                  htmlFor="f-from"
-                  className="mb-1.5 inline-block text-xs font-medium"
+          <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-4">
+            <div>
+              <Label className="mb-2 inline-block text-xs font-medium">
+                Période
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {PERIODE_PRESETS.map((preset) => {
+                  const active = currentPreset === preset.value;
+                  return (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => selectPreset(preset.value)}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                        active
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background hover:bg-muted",
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={toggleCustom}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                    isCustom
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background hover:bg-muted",
+                  )}
                 >
-                  Du
-                </Label>
-                <Input
-                  id="f-from"
-                  type="date"
-                  value={from}
-                  onChange={(e) =>
-                    pushParams({ from: e.target.value || null })
-                  }
-                  max={to}
-                />
-              </div>
-              <div>
-                <Label
-                  htmlFor="f-to"
-                  className="mb-1.5 inline-block text-xs font-medium"
-                >
-                  Au
-                </Label>
-                <Input
-                  id="f-to"
-                  type="date"
-                  value={to}
-                  onChange={(e) => pushParams({ to: e.target.value || null })}
-                  min={from}
-                />
+                  Personnalisé…
+                </button>
               </div>
             </div>
+
+            {isCustom && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label
+                    htmlFor="f-from"
+                    className="mb-1.5 inline-block text-xs font-medium"
+                  >
+                    Du
+                  </Label>
+                  <Input
+                    id="f-from"
+                    type="date"
+                    value={from}
+                    onChange={(e) =>
+                      pushParams({ from: e.target.value || null })
+                    }
+                    max={to || undefined}
+                  />
+                </div>
+                <div>
+                  <Label
+                    htmlFor="f-to"
+                    className="mb-1.5 inline-block text-xs font-medium"
+                  >
+                    Au
+                  </Label>
+                  <Input
+                    id="f-to"
+                    type="date"
+                    value={to}
+                    onChange={(e) => pushParams({ to: e.target.value || null })}
+                    min={from || undefined}
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <Label
@@ -183,10 +271,10 @@ export function HistoriqueFilters({
       </Sheet>
 
       <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
-        <span>{dateLabel}</span>
+        <span>{periodLabel}</span>
         {typeLabel && (
           <>
-            <span>·</span>
+            <span aria-hidden>·</span>
             <span>{typeLabel}</span>
           </>
         )}
@@ -208,6 +296,7 @@ export function HistoriqueFilters({
 }
 
 function formatHumanDate(iso: string): string {
+  if (!iso) return "—";
   try {
     return new Date(iso).toLocaleDateString("fr-BE", {
       day: "numeric",
@@ -216,8 +305,4 @@ function formatHumanDate(iso: string): string {
   } catch {
     return iso;
   }
-}
-
-function findTypeLabel(value: string): string {
-  return TYPE_OPTIONS.find((o) => o.value === value)?.label ?? value;
 }

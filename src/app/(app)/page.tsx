@@ -216,7 +216,7 @@ export default async function DashboardPage() {
                     return (
                       <li
                         key={m.id}
-                        className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+                        className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 first:pt-0 last:pb-0"
                       >
                         <Badge
                           variant={MOUVEMENT_VARIANT[m.type]}

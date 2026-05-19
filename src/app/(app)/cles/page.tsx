@@ -250,7 +250,7 @@ export default async function ClesPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex items-start justify-between gap-4">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Clés</h1>
           <p className="text-muted-foreground text-sm">
@@ -263,7 +263,7 @@ export default async function ClesPage({
             mode="create"
             biens={biens}
             trigger={
-              <Button>
+              <Button className="self-start sm:self-auto">
                 <Plus aria-hidden />
                 Nouvelle clé
               </Button>
@@ -304,7 +304,7 @@ export default async function ClesPage({
       )}
 
       {!error && cles && cles.length > 0 && (
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>

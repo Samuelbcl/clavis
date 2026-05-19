@@ -59,7 +59,7 @@ function sanitizeForIlike(input: string): string {
 export default async function PersonnesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; type?: string }>;
+  searchParams: Promise<{ q?: string; type?: string; type_precise?: string }>;
 }) {
   const params = await searchParams;
   const q = params.q?.trim() ?? "";
@@ -68,6 +68,7 @@ export default async function PersonnesPage({
     typeParam && VALID_TYPES.has(typeParam as PersonneType)
       ? (typeParam as PersonneType)
       : null;
+  const typePrecise = params.type_precise?.trim() ?? "";
 
   const user = await getCurrentUser();
   const supabase = await createClient();
@@ -85,13 +86,30 @@ export default async function PersonnesPage({
     if (safe.length > 0) {
       const pattern = `%${safe}%`;
       query = query.or(
-        `nom.ilike.${pattern},prenom.ilike.${pattern},telephone.ilike.${pattern}`,
+        [
+          `nom.ilike.${pattern}`,
+          `prenom.ilike.${pattern}`,
+          `telephone.ilike.${pattern}`,
+          `metier.ilike.${pattern}`,
+          `email.ilike.${pattern}`,
+        ].join(","),
       );
     }
   }
 
   if (typeFilter) {
     query = query.eq("type", typeFilter);
+  }
+
+  // Quand on filtre par "autre" + une précision, on cherche dans le métier
+  // (et les notes) pour affiner. Permet au client d'avoir ses sous-types
+  // personnalisés (huissier, ami, expert-comptable, etc.).
+  if (typeFilter === "autre" && typePrecise) {
+    const safe = sanitizeForIlike(typePrecise);
+    if (safe.length > 0) {
+      const pattern = `%${safe}%`;
+      query = query.or(`metier.ilike.${pattern},notes.ilike.${pattern}`);
+    }
   }
 
   let personnes: Awaited<typeof query>["data"] = null;
@@ -113,7 +131,7 @@ export default async function PersonnesPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex items-start justify-between gap-4">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Personnes</h1>
           <p className="text-muted-foreground text-sm">
@@ -124,7 +142,7 @@ export default async function PersonnesPage({
         <PersonneFormDialog
           mode="create"
           trigger={
-            <Button>
+            <Button className="self-start sm:self-auto">
               <Plus aria-hidden />
               Nouvelle personne
             </Button>
@@ -158,7 +176,7 @@ export default async function PersonnesPage({
       )}
 
       {!error && personnes && personnes.length > 0 && (
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
