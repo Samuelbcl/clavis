@@ -1,11 +1,249 @@
-import { StubPage } from "@/components/clavis/stub-page";
+import { Mail, MoreHorizontal, Phone, Plus } from "lucide-react";
 
-export default function PersonnesPage() {
+import { DeletePersonneDialog } from "@/components/clavis/personnes/delete-personne-dialog";
+import { PersonneFormDialog } from "@/components/clavis/personnes/personne-form-dialog";
+import { PersonnesFilters } from "@/components/clavis/personnes/personnes-filters";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { getCurrentUser } from "@/lib/auth/current-user";
+import { createClient } from "@/lib/supabase/server";
+import type { Database } from "@/types/database";
+
+type PersonneType = Database["public"]["Enums"]["personne_type"];
+
+const TYPE_LABELS: Record<PersonneType, string> = {
+  locataire: "Locataire",
+  ouvrier: "Ouvrier",
+  artisan: "Artisan",
+  agent: "Agent immo.",
+  notaire: "Notaire",
+  proprietaire: "Propriétaire",
+  autre: "Autre",
+};
+
+const VALID_TYPES = new Set<PersonneType>([
+  "locataire",
+  "ouvrier",
+  "artisan",
+  "agent",
+  "notaire",
+  "proprietaire",
+  "autre",
+]);
+
+function sanitizeForIlike(input: string): string {
+  return input.replace(/[%_,()]/g, " ").trim();
+}
+
+export default async function PersonnesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; type?: string }>;
+}) {
+  const params = await searchParams;
+  const q = params.q?.trim() ?? "";
+  const typeParam = params.type;
+  const typeFilter =
+    typeParam && VALID_TYPES.has(typeParam as PersonneType)
+      ? (typeParam as PersonneType)
+      : null;
+
+  const user = await getCurrentUser();
+  const supabase = await createClient();
+
+  let query = supabase
+    .from("personnes")
+    .select(
+      "id, nom, prenom, telephone, email, type, metier, notes, created_at, updated_at",
+    )
+    .order("nom", { ascending: true })
+    .order("prenom", { ascending: true });
+
+  if (q) {
+    const safe = sanitizeForIlike(q);
+    if (safe.length > 0) {
+      const pattern = `%${safe}%`;
+      query = query.or(
+        `nom.ilike.${pattern},prenom.ilike.${pattern},telephone.ilike.${pattern}`,
+      );
+    }
+  }
+
+  if (typeFilter) {
+    query = query.eq("type", typeFilter);
+  }
+
+  let personnes: Awaited<typeof query>["data"] = null;
+  let error: Awaited<typeof query>["error"] = null;
+  try {
+    const res = await query;
+    personnes = res.data;
+    error = res.error;
+  } catch (err) {
+    console.error("[personnes/page] query threw:", err);
+    error = {
+      code: "unknown",
+      message: err instanceof Error ? err.message : String(err),
+      details: "",
+      hint: "",
+      name: "PostgrestError",
+    } as never;
+  }
+
   return (
-    <StubPage
-      title="Personnes"
-      step="1.7"
-      description="Locataires, ouvriers, artisans, agents — tous ceux qui peuvent détenir une clé."
-    />
+    <div className="flex flex-col gap-6">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Personnes</h1>
+          <p className="text-muted-foreground text-sm">
+            Locataires, ouvriers, artisans, agents et autres détenteurs
+            potentiels de clés.
+          </p>
+        </div>
+        <PersonneFormDialog
+          mode="create"
+          trigger={
+            <Button>
+              <Plus aria-hidden />
+              Nouvelle personne
+            </Button>
+          }
+        />
+      </header>
+
+      <PersonnesFilters />
+
+      {error && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Erreur de chargement</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-destructive text-sm">{error.message}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!error && (!personnes || personnes.length === 0) && (
+        <Card>
+          <CardContent className="py-10 text-center">
+            <p className="text-muted-foreground text-sm">
+              {q || typeFilter
+                ? "Aucune personne ne correspond aux filtres."
+                : "Aucune personne enregistrée. Ajoute-en une avec « Nouvelle personne »."}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!error && personnes && personnes.length > 0 && (
+        <div className="overflow-hidden rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nom</TableHead>
+                <TableHead>Contact</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Métier</TableHead>
+                <TableHead className="w-12 text-right" aria-label="Actions" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {personnes.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-medium">
+                    {p.prenom} {p.nom}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    <div className="flex flex-col gap-0.5 text-xs">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Phone aria-hidden className="size-3" />
+                        {p.telephone}
+                      </span>
+                      {p.email && (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Mail aria-hidden className="size-3" />
+                          {p.email}
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{TYPE_LABELS[p.type]}</Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {p.metier ?? "—"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Actions pour ${p.prenom} ${p.nom}`}
+                          />
+                        }
+                      >
+                        <MoreHorizontal aria-hidden />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <PersonneFormDialog
+                          mode="edit"
+                          personne={p}
+                          trigger={
+                            <DropdownMenuItem closeOnClick={false}>
+                              Éditer
+                            </DropdownMenuItem>
+                          }
+                        />
+                        {user.role === "admin" && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DeletePersonneDialog
+                              personneId={p.id}
+                              personneNom={`${p.prenom} ${p.nom}`}
+                              trigger={
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  closeOnClick={false}
+                                >
+                                  Supprimer
+                                </DropdownMenuItem>
+                              }
+                            />
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
   );
 }
