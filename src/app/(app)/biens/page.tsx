@@ -75,7 +75,9 @@ export default async function BiensPage({
 
   let query = supabase
     .from("biens")
-    .select("id, nom, adresse_complete, code_postal, ville, type, notes, created_at, updated_at")
+    .select(
+      "id, nom, adresse_complete, code_postal, ville, type, notes, created_at, updated_at",
+    )
     .order("nom", { ascending: true });
 
   if (q) {
@@ -92,7 +94,22 @@ export default async function BiensPage({
     query = query.eq("type", typeFilter);
   }
 
-  const { data: biens, error } = await query;
+  let biens: Awaited<typeof query>["data"] = null;
+  let error: Awaited<typeof query>["error"] = null;
+  try {
+    const res = await query;
+    biens = res.data;
+    error = res.error;
+  } catch (err) {
+    console.error("[biens/page] query threw:", err);
+    error = {
+      code: "unknown",
+      message: err instanceof Error ? err.message : String(err),
+      details: "",
+      hint: "",
+      name: "PostgrestError",
+    } as never;
+  }
 
   return (
     <div className="flex flex-col gap-6">
