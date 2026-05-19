@@ -6,6 +6,9 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 
+// Schéma et types : non exportés (un fichier "use server" ne peut exporter que des
+// fonctions async). Les types sont ré-exportés via `export type` qui est effacé
+// au build et donc autorisé.
 const BIEN_TYPES = [
   "maison",
   "appartement",
@@ -15,7 +18,7 @@ const BIEN_TYPES = [
   "autre",
 ] as const;
 
-export const bienSchema = z.object({
+const bienSchema = z.object({
   nom: z.string().trim().min(1, "Nom requis").max(200),
   adresse_complete: z.string().trim().min(1, "Adresse requise").max(500),
   code_postal: z
@@ -33,9 +36,8 @@ export const bienSchema = z.object({
 });
 
 export type BienInput = z.input<typeof bienSchema>;
-export type BienParsed = z.output<typeof bienSchema>;
 
-export type ActionResult<T = void> =
+type ActionResult<T = void> =
   | { ok: true; data?: T; message?: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string> };
 
